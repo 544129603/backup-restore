@@ -1,0 +1,3626 @@
+﻿apiVersion: v1
+kind: Namespace
+metadata:
+  name: backup-system
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.3
+  name: backuppluginconfigs.protection.platform.io
+spec:
+  group: protection.platform.io
+  names:
+    kind: BackupPluginConfig
+    listKind: BackupPluginConfigList
+    plural: backuppluginconfigs
+    shortNames:
+    - bpconfig
+    singular: backuppluginconfig
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.concurrency.maxBackupTasks
+      name: Backups
+      type: integer
+    - jsonPath: .spec.concurrency.maxRestoreTasks
+      name: Restores
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              concurrency:
+                properties:
+                  maxBackupTasks:
+                    default: 3
+                    format: int32
+                    type: integer
+                  maxRepositoryOperations:
+                    default: 4
+                    format: int32
+                    type: integer
+                  maxRestoreTasks:
+                    default: 1
+                    format: int32
+                    type: integer
+                  maxSnapshotsPerTask:
+                    default: 10
+                    format: int32
+                    type: integer
+                type: object
+              defaultBackupTimeout:
+                default: 4h
+                type: string
+              defaultRestoreTimeout:
+                default: 4h
+                type: string
+              defaultSnapshotTimeout:
+                default: 10m
+                type: string
+              defaultTimezone:
+                default: Etc/UTC
+                type: string
+              garbageCollection:
+                properties:
+                  interval:
+                    default: 1h
+                    type: string
+                  stagingGracePeriod:
+                    default: 24h
+                    type: string
+                  terminalTaskTTLDays:
+                    default: 90
+                    format: int32
+                    type: integer
+                type: object
+              kubernetesClient:
+                properties:
+                  burst:
+                    default: 40
+                    format: int32
+                    type: integer
+                  pageSize:
+                    default: 500
+                    format: int64
+                    type: integer
+                  qps:
+                    default: 20
+                    format: int32
+                    type: integer
+                type: object
+              logLevel:
+                type: string
+              security:
+                properties:
+                  allowInsecureSFTP:
+                    type: boolean
+                  allowedSecretNamespaces:
+                    default:
+                    - backup-system
+                    items:
+                      type: string
+                    type: array
+                  hookExecutionEnabled:
+                    type: boolean
+                  requireEncryptionForSecrets:
+                    default: true
+                    type: boolean
+                type: object
+              workspacePath:
+                type: string
+            type: object
+          status:
+            properties:
+              completedAt:
+                format: date-time
+                type: string
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              createdAt:
+                format: date-time
+                type: string
+              effectiveConfigHash:
+                type: string
+              errorCode:
+                type: string
+              lastAppliedAt:
+                format: date-time
+                type: string
+              message:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              operatorVersion:
+                type: string
+              phase:
+                type: string
+              reason:
+                type: string
+              startedAt:
+                format: date-time
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.3
+  name: backuppolicies.protection.platform.io
+spec:
+  group: protection.platform.io
+  names:
+    kind: BackupPolicy
+    listKind: BackupPolicyList
+    plural: backuppolicies
+    shortNames:
+    - bpolicy
+    singular: backuppolicy
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.schedule.cron
+      name: Schedule
+      type: string
+    - jsonPath: .spec.schedule.timezone
+      name: Timezone
+      type: string
+    - jsonPath: .spec.enabled
+      name: Enabled
+      type: boolean
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.nextScheduleTime
+      name: Next
+      type: date
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              clusterRef:
+                minLength: 1
+                type: string
+              concurrencyPolicy:
+                default: Forbid
+                enum:
+                - Allow
+                - Forbid
+                - Replace
+                type: string
+              enabled:
+                type: boolean
+              maxCatchUpRuns:
+                default: 1
+                format: int32
+                maximum: 10
+                minimum: 1
+                type: integer
+              missedRunPolicy:
+                default: Skip
+                enum:
+                - Skip
+                - RunOnce
+                - RunAll
+                type: string
+              projectRef:
+                default: _platform
+                type: string
+              repositoryRef:
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+              retention:
+                properties:
+                  deleteSnapshots:
+                    default: false
+                    type: boolean
+                  maxAgeDays:
+                    default: 30
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  maxCopies:
+                    default: 7
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  minCopies:
+                    default: 1
+                    format: int32
+                    minimum: 0
+                    type: integer
+                type: object
+              retryPolicy:
+                properties:
+                  backoff:
+                    default: 30s
+                    type: string
+                  maxAttempts:
+                    default: 3
+                    format: int32
+                    maximum: 20
+                    minimum: 0
+                    type: integer
+                  maxBackoff:
+                    default: 10m
+                    type: string
+                  retryableCodes:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              schedule:
+                properties:
+                  cron:
+                    type: string
+                  timezone:
+                    default: Etc/UTC
+                    type: string
+                required:
+                - cron
+                type: object
+              scopeRef:
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+              startingDeadline:
+                default: 1h
+                type: string
+              suspend:
+                type: boolean
+              tenantRef:
+                type: string
+              timeout:
+                default: 4h
+                type: string
+            required:
+            - clusterRef
+            - projectRef
+            - repositoryRef
+            - schedule
+            - scopeRef
+            type: object
+          status:
+            properties:
+              activeTasks:
+                items:
+                  properties:
+                    name:
+                      minLength: 1
+                      type: string
+                    uid:
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              completedAt:
+                format: date-time
+                type: string
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              consecutiveFailures:
+                format: int32
+                type: integer
+              createdAt:
+                format: date-time
+                type: string
+              errorCode:
+                type: string
+              lastEvaluatedScheduleTime:
+                format: date-time
+                type: string
+              lastScheduleTime:
+                format: date-time
+                type: string
+              lastSuccessfulTime:
+                format: date-time
+                type: string
+              message:
+                type: string
+              nextScheduleTime:
+                format: date-time
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              reason:
+                type: string
+              resolvedRepositoryUID:
+                type: string
+              resolvedScopeUID:
+                type: string
+              skippedRuns:
+                items:
+                  properties:
+                    reason:
+                      type: string
+                    scheduledAt:
+                      format: date-time
+                      type: string
+                  required:
+                  - reason
+                  - scheduledAt
+                  type: object
+                type: array
+              startedAt:
+                format: date-time
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.3
+  name: backuprecords.protection.platform.io
+spec:
+  group: protection.platform.io
+  names:
+    kind: BackupRecord
+    listKind: BackupRecordList
+    plural: backuprecords
+    shortNames:
+    - brecord
+    singular: backuprecord
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.source.clusterRef
+      name: Cluster
+      type: string
+    - jsonPath: .spec.repositoryRef.name
+      name: Repository
+      type: string
+    - jsonPath: .spec.inventory.resourceCount
+      name: Resources
+      type: integer
+    - jsonPath: .spec.inventory.pvcCount
+      name: PVCs
+      type: integer
+    - jsonPath: .spec.inventory.backupBytes
+      name: Bytes
+      type: integer
+    - jsonPath: .spec.expiresAt
+      name: Expires
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              backupID:
+                type: string
+              backupPath:
+                type: string
+              checksum:
+                type: string
+              checksumAlgorithm:
+                type: string
+              clusterRef:
+                minLength: 1
+                type: string
+              contentCompleteness:
+                type: string
+              encryption:
+                properties:
+                  algorithm:
+                    type: string
+                  enabled:
+                    type: boolean
+                  keyRef:
+                    properties:
+                      key:
+                        minLength: 1
+                        type: string
+                      name:
+                        minLength: 1
+                        type: string
+                      namespace:
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    - namespace
+                    type: object
+                type: object
+              expiresAt:
+                format: date-time
+                type: string
+              formatVersion:
+                type: string
+              inventory:
+                properties:
+                  backupBytes:
+                    format: int64
+                    type: integer
+                  failedResourceCount:
+                    format: int64
+                    type: integer
+                  failedSnapshotCount:
+                    format: int64
+                    type: integer
+                  namespaceCount:
+                    format: int64
+                    type: integer
+                  pvcCount:
+                    format: int64
+                    type: integer
+                  resourceCount:
+                    format: int64
+                    type: integer
+                  snapshotCount:
+                    format: int64
+                    type: integer
+                type: object
+              operatorVersion:
+                type: string
+              policyRef:
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+              projectRef:
+                default: _platform
+                type: string
+              repositoryRef:
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+              snapshotLifecycle:
+                type: string
+              snapshots:
+                items:
+                  properties:
+                    creationTime:
+                      format: date-time
+                      type: string
+                    driver:
+                      type: string
+                    error:
+                      type: string
+                    phase:
+                      type: string
+                    pvcName:
+                      type: string
+                    pvcNamespace:
+                      type: string
+                    readyToUse:
+                      type: boolean
+                    restoreSize:
+                      format: int64
+                      type: integer
+                    snapshotClass:
+                      type: string
+                    snapshotHandle:
+                      type: string
+                    storageClass:
+                      type: string
+                    volumeSnapshotContentName:
+                      type: string
+                    volumeSnapshotName:
+                      type: string
+                  required:
+                  - pvcName
+                  - pvcNamespace
+                  type: object
+                type: array
+              source:
+                properties:
+                  clusterRef:
+                    type: string
+                  clusterUID:
+                    type: string
+                  kubernetesVersion:
+                    type: string
+                  namespaces:
+                    items:
+                      type: string
+                    type: array
+                  scopeMode:
+                    type: string
+                required:
+                - clusterRef
+                type: object
+              sourceTaskRef:
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+              tenantRef:
+                type: string
+            required:
+            - backupID
+            - backupPath
+            - checksum
+            - clusterRef
+            - formatVersion
+            - projectRef
+            - repositoryRef
+            - source
+            - sourceTaskRef
+            type: object
+          status:
+            properties:
+              completedAt:
+                format: date-time
+                type: string
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              createdAt:
+                format: date-time
+                type: string
+              deletion:
+                properties:
+                  mode:
+                    type: string
+                  repositoryDataDeleted:
+                    type: boolean
+                  snapshotsDeleted:
+                    format: int32
+                    type: integer
+                  startedAt:
+                    format: date-time
+                    type: string
+                type: object
+              errorCode:
+                type: string
+              lastRestoreTime:
+                format: date-time
+                type: string
+              lastVerifiedAt:
+                format: date-time
+                type: string
+              message:
+                type: string
+              missingSnapshots:
+                items:
+                  type: string
+                type: array
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              protected:
+                type: boolean
+              reason:
+                type: string
+              restorable:
+                type: boolean
+              restoreCount:
+                format: int64
+                type: integer
+              startedAt:
+                format: date-time
+                type: string
+              verifiedFiles:
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.3
+  name: backuprepositories.protection.platform.io
+spec:
+  group: protection.platform.io
+  names:
+    kind: BackupRepository
+    listKind: BackupRepositoryList
+    plural: backuprepositories
+    shortNames:
+    - brepo
+    singular: backuprepository
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .spec.clusterRef
+      name: Cluster
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.availableBytes
+      name: Available
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              clusterRef:
+                minLength: 1
+                type: string
+              compression:
+                properties:
+                  algorithm:
+                    default: Gzip
+                    enum:
+                    - None
+                    - Gzip
+                    type: string
+                  level:
+                    default: 6
+                    format: int32
+                    maximum: 9
+                    minimum: 1
+                    type: integer
+                type: object
+              deletionProtection:
+                default: true
+                type: boolean
+              enabled:
+                default: true
+                type: boolean
+              encryption:
+                properties:
+                  algorithm:
+                    default: AES256GCM
+                    enum:
+                    - AES256GCM
+                    type: string
+                  enabled:
+                    type: boolean
+                  keyRef:
+                    properties:
+                      key:
+                        minLength: 1
+                        type: string
+                      name:
+                        minLength: 1
+                        type: string
+                      namespace:
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    - namespace
+                    type: object
+                type: object
+              healthCheckInterval:
+                default: 30m
+                type: string
+              local:
+                properties:
+                  gid:
+                    default: 1000
+                    format: int64
+                    type: integer
+                  mode:
+                    enum:
+                    - HostPath
+                    - PVC
+                    type: string
+                  nodeName:
+                    type: string
+                  nodeSelector:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  path:
+                    type: string
+                  pvc:
+                    properties:
+                      mountPath:
+                        type: string
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+                      subPath:
+                        type: string
+                    required:
+                    - mountPath
+                    - name
+                    - namespace
+                    type: object
+                  uid:
+                    default: 1000
+                    format: int64
+                    type: integer
+                required:
+                - mode
+                type: object
+              minimumFreeBytes:
+                anyOf:
+                - type: integer
+                - type: string
+                default: 10Gi
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
+              projectRef:
+                default: _platform
+                type: string
+              retryCount:
+                default: 3
+                format: int32
+                type: integer
+              sftp:
+                properties:
+                  auth:
+                    properties:
+                      passphraseRef:
+                        properties:
+                          key:
+                            minLength: 1
+                            type: string
+                          name:
+                            minLength: 1
+                            type: string
+                          namespace:
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        - namespace
+                        type: object
+                      passwordRef:
+                        properties:
+                          key:
+                            minLength: 1
+                            type: string
+                          name:
+                            minLength: 1
+                            type: string
+                          namespace:
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        - namespace
+                        type: object
+                      privateKeyRef:
+                        properties:
+                          key:
+                            minLength: 1
+                            type: string
+                          name:
+                            minLength: 1
+                            type: string
+                          namespace:
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        - namespace
+                        type: object
+                      type:
+                        enum:
+                        - Password
+                        - PrivateKey
+                        type: string
+                      usernameRef:
+                        properties:
+                          key:
+                            minLength: 1
+                            type: string
+                          name:
+                            minLength: 1
+                            type: string
+                          namespace:
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        - namespace
+                        type: object
+                    required:
+                    - type
+                    - usernameRef
+                    type: object
+                  basePath:
+                    type: string
+                  connectTimeout:
+                    default: 10s
+                    type: string
+                  host:
+                    type: string
+                  insecureSkipHostKeyCheck:
+                    default: false
+                    type: boolean
+                  keepAliveInterval:
+                    default: 30s
+                    type: string
+                  knownHostsRef:
+                    properties:
+                      key:
+                        minLength: 1
+                        type: string
+                      name:
+                        minLength: 1
+                        type: string
+                      namespace:
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    - namespace
+                    type: object
+                  maxConnections:
+                    default: 4
+                    format: int32
+                    maximum: 16
+                    minimum: 1
+                    type: integer
+                  operationTimeout:
+                    default: 5m
+                    type: string
+                  port:
+                    default: 22
+                    format: int32
+                    maximum: 65535
+                    minimum: 1
+                    type: integer
+                required:
+                - auth
+                - basePath
+                - host
+                type: object
+              tenantRef:
+                type: string
+              timeout:
+                default: 30s
+                type: string
+              type:
+                enum:
+                - Local
+                - SFTP
+                type: string
+            required:
+            - clusterRef
+            - projectRef
+            - type
+            type: object
+          status:
+            properties:
+              activePolicyCount:
+                format: int32
+                type: integer
+              availableBytes:
+                format: int64
+                type: integer
+              capabilities:
+                properties:
+                  atomicRename:
+                    type: boolean
+                  capacity:
+                    type: boolean
+                  delete:
+                    type: boolean
+                  read:
+                    type: boolean
+                  write:
+                    type: boolean
+                type: object
+              capacityKnown:
+                type: boolean
+              completedAt:
+                format: date-time
+                type: string
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              createdAt:
+                format: date-time
+                type: string
+              errorCode:
+                type: string
+              lastCheckTime:
+                format: date-time
+                type: string
+              lastSuccessfulCheckTime:
+                format: date-time
+                type: string
+              message:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              pvcPhase:
+                type: string
+              reason:
+                type: string
+              recordCount:
+                format: int32
+                type: integer
+              resolvedNodeName:
+                type: string
+              startedAt:
+                format: date-time
+                type: string
+              totalBytes:
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.3
+  name: backupscopes.protection.platform.io
+spec:
+  group: protection.platform.io
+  names:
+    kind: BackupScope
+    listKind: BackupScopeList
+    plural: backupscopes
+    shortNames:
+    - bscope
+    singular: backupscope
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
+    - jsonPath: .spec.clusterRef
+      name: Cluster
+      type: string
+    - jsonPath: .spec.projectRef
+      name: Project
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.preview.resourceObjectCount
+      name: Objects
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              clusterRef:
+                minLength: 1
+                type: string
+              consistencyMode:
+                default: CrashConsistent
+                enum:
+                - CrashConsistent
+                - AppConsistent
+                - ManualQuiesce
+                type: string
+              excludeNamespaces:
+                items:
+                  type: string
+                type: array
+              hooks:
+                description: |-
+                  HookSpec is versioned now so AppConsistent backups can be introduced without
+                  changing the scope model. The v1.0 webhook only permits empty hook lists.
+                properties:
+                  post:
+                    items:
+                      properties:
+                        command:
+                          items:
+                            type: string
+                          type: array
+                        container:
+                          type: string
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        onError:
+                          enum:
+                          - Fail
+                          - Continue
+                          type: string
+                        podSelector:
+                          description: |-
+                            A label selector is a label query over a set of resources. The result of matchLabels and
+                            matchExpressions are ANDed. An empty label selector matches all objects. A null
+                            label selector matches no objects.
+                          properties:
+                            matchExpressions:
+                              description: matchExpressions is a list of label selector
+                                requirements. The requirements are ANDed.
+                              items:
+                                description: |-
+                                  A label selector requirement is a selector that contains values, a key, and an operator that
+                                  relates the key and values.
+                                properties:
+                                  key:
+                                    description: key is the label key that the selector
+                                      applies to.
+                                    type: string
+                                  operator:
+                                    description: |-
+                                      operator represents a key's relationship to a set of values.
+                                      Valid operators are In, NotIn, Exists and DoesNotExist.
+                                    type: string
+                                  values:
+                                    description: |-
+                                      values is an array of string values. If the operator is In or NotIn,
+                                      the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                      the values array must be empty. This array is replaced during a strategic
+                                      merge patch.
+                                    items:
+                                      type: string
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            matchLabels:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                operator is "In", and the values array contains only "value". The requirements are ANDed.
+                              type: object
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        timeout:
+                          type: string
+                      required:
+                      - command
+                      - name
+                      - namespace
+                      type: object
+                    type: array
+                  pre:
+                    items:
+                      properties:
+                        command:
+                          items:
+                            type: string
+                          type: array
+                        container:
+                          type: string
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        onError:
+                          enum:
+                          - Fail
+                          - Continue
+                          type: string
+                        podSelector:
+                          description: |-
+                            A label selector is a label query over a set of resources. The result of matchLabels and
+                            matchExpressions are ANDed. An empty label selector matches all objects. A null
+                            label selector matches no objects.
+                          properties:
+                            matchExpressions:
+                              description: matchExpressions is a list of label selector
+                                requirements. The requirements are ANDed.
+                              items:
+                                description: |-
+                                  A label selector requirement is a selector that contains values, a key, and an operator that
+                                  relates the key and values.
+                                properties:
+                                  key:
+                                    description: key is the label key that the selector
+                                      applies to.
+                                    type: string
+                                  operator:
+                                    description: |-
+                                      operator represents a key's relationship to a set of values.
+                                      Valid operators are In, NotIn, Exists and DoesNotExist.
+                                    type: string
+                                  values:
+                                    description: |-
+                                      values is an array of string values. If the operator is In or NotIn,
+                                      the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                      the values array must be empty. This array is replaced during a strategic
+                                      merge patch.
+                                    items:
+                                      type: string
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            matchLabels:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                operator is "In", and the values array contains only "value". The requirements are ANDed.
+                              type: object
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        timeout:
+                          type: string
+                      required:
+                      - command
+                      - name
+                      - namespace
+                      type: object
+                    type: array
+                type: object
+              includeCRDs:
+                type: boolean
+              includeClusterResources:
+                type: boolean
+              includeCustomResources:
+                type: boolean
+              includeNamespaces:
+                items:
+                  type: string
+                type: array
+              includeSecrets:
+                type: boolean
+              labelSelector:
+                description: |-
+                  A label selector is a label query over a set of resources. The result of matchLabels and
+                  matchExpressions are ANDed. An empty label selector matches all objects. A null
+                  label selector matches no objects.
+                properties:
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
+                    items:
+                      description: |-
+                        A label selector requirement is a selector that contains values, a key, and an operator that
+                        relates the key and values.
+                      properties:
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
+                          type: string
+                        operator:
+                          description: |-
+                            operator represents a key's relationship to a set of values.
+                            Valid operators are In, NotIn, Exists and DoesNotExist.
+                          type: string
+                        values:
+                          description: |-
+                            values is an array of string values. If the operator is In or NotIn,
+                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                            the values array must be empty. This array is replaced during a strategic
+                            merge patch.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                    type: object
+                type: object
+                x-kubernetes-map-type: atomic
+              mode:
+                enum:
+                - Cluster
+                - Namespace
+                type: string
+              projectRef:
+                default: _platform
+                type: string
+              pvc:
+                properties:
+                  enabled:
+                    default: true
+                    type: boolean
+                  exclude:
+                    items:
+                      type: string
+                    type: array
+                  failurePolicy:
+                    default: ContinueAndMarkPartial
+                    enum:
+                    - FailFast
+                    - ContinueAndMarkPartial
+                    type: string
+                  include:
+                    items:
+                      type: string
+                    type: array
+                  labelSelector:
+                    description: |-
+                      A label selector is a label query over a set of resources. The result of matchLabels and
+                      matchExpressions are ANDed. An empty label selector matches all objects. A null
+                      label selector matches no objects.
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
+                        items:
+                          description: |-
+                            A label selector requirement is a selector that contains values, a key, and an operator that
+                            relates the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: |-
+                                operator represents a key's relationship to a set of values.
+                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: |-
+                                values is an array of string values. If the operator is In or NotIn,
+                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced during a strategic
+                                merge patch.
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                          map is equivalent to an element of matchExpressions, whose key field is "key", the
+                          operator is "In", and the values array contains only "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  lifecycle:
+                    default: RetainAfterRecordDeletion
+                    enum:
+                    - DeleteWithRecord
+                    - RetainAfterRecordDeletion
+                    type: string
+                  snapshotClassMapping:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  snapshotClassName:
+                    type: string
+                  snapshotTimeout:
+                    default: 10m
+                    type: string
+                type: object
+              resources:
+                properties:
+                  exclude:
+                    items:
+                      type: string
+                    type: array
+                  excludeCluster:
+                    items:
+                      type: string
+                    type: array
+                  include:
+                    items:
+                      type: string
+                    type: array
+                  includeCluster:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              tenantRef:
+                type: string
+            required:
+            - clusterRef
+            - mode
+            - projectRef
+            type: object
+          status:
+            properties:
+              completedAt:
+                format: date-time
+                type: string
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              createdAt:
+                format: date-time
+                type: string
+              errorCode:
+                type: string
+              message:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              preview:
+                properties:
+                  generatedAt:
+                    format: date-time
+                    type: string
+                  namespaceCount:
+                    format: int64
+                    type: integer
+                  pvcCount:
+                    format: int64
+                    type: integer
+                  resolvedHash:
+                    type: string
+                  resourceObjectCount:
+                    format: int64
+                    type: integer
+                  resourceTypeCount:
+                    format: int64
+                    type: integer
+                  riskCount:
+                    format: int64
+                    type: integer
+                  snapshotCapablePVCCount:
+                    format: int64
+                    type: integer
+                  unsupportedPVCCount:
+                    format: int64
+                    type: integer
+                type: object
+              reason:
+                type: string
+              referencedByPolicies:
+                format: int32
+                type: integer
+              startedAt:
+                format: date-time
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.3
+  name: backuptasks.protection.platform.io
+spec:
+  group: protection.platform.io
+  names:
+    kind: BackupTask
+    listKind: BackupTaskList
+    plural: backuptasks
+    shortNames:
+    - btask
+    singular: backuptask
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.trigger
+      name: Trigger
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.progress.percent
+      name: Progress
+      type: integer
+    - jsonPath: .status.recordRef.name
+      name: Record
+      type: string
+    - jsonPath: .status.startedAt
+      name: Started
+      type: date
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              allowPartialRecord:
+                default: true
+                type: boolean
+              cancelReason:
+                type: string
+              cancelRequested:
+                type: boolean
+              clusterRef:
+                minLength: 1
+                type: string
+              failurePolicy:
+                default: Continue
+                enum:
+                - FailFast
+                - Continue
+                type: string
+              idempotencyKey:
+                type: string
+              parentTaskRef:
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+              policyRef:
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+              projectRef:
+                default: _platform
+                type: string
+              repositoryGeneration:
+                format: int64
+                type: integer
+              repositoryRef:
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+              retryPolicy:
+                properties:
+                  backoff:
+                    default: 30s
+                    type: string
+                  maxAttempts:
+                    default: 3
+                    format: int32
+                    maximum: 20
+                    minimum: 0
+                    type: integer
+                  maxBackoff:
+                    default: 10m
+                    type: string
+                  retryableCodes:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              scheduledAt:
+                format: date-time
+                type: string
+              scopeGeneration:
+                format: int64
+                type: integer
+              scopeRef:
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+              scopeSnapshot:
+                description: |-
+                  ScopeSnapshot freezes selection semantics for reproducible execution. The
+                  policy controller populates it; manual tasks may omit it and resolve once.
+                properties:
+                  clusterRef:
+                    minLength: 1
+                    type: string
+                  consistencyMode:
+                    default: CrashConsistent
+                    enum:
+                    - CrashConsistent
+                    - AppConsistent
+                    - ManualQuiesce
+                    type: string
+                  excludeNamespaces:
+                    items:
+                      type: string
+                    type: array
+                  hooks:
+                    description: |-
+                      HookSpec is versioned now so AppConsistent backups can be introduced without
+                      changing the scope model. The v1.0 webhook only permits empty hook lists.
+                    properties:
+                      post:
+                        items:
+                          properties:
+                            command:
+                              items:
+                                type: string
+                              type: array
+                            container:
+                              type: string
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            onError:
+                              enum:
+                              - Fail
+                              - Continue
+                              type: string
+                            podSelector:
+                              description: |-
+                                A label selector is a label query over a set of resources. The result of matchLabels and
+                                matchExpressions are ANDed. An empty label selector matches all objects. A null
+                                label selector matches no objects.
+                              properties:
+                                matchExpressions:
+                                  description: matchExpressions is a list of label
+                                    selector requirements. The requirements are ANDed.
+                                  items:
+                                    description: |-
+                                      A label selector requirement is a selector that contains values, a key, and an operator that
+                                      relates the key and values.
+                                    properties:
+                                      key:
+                                        description: key is the label key that the
+                                          selector applies to.
+                                        type: string
+                                      operator:
+                                        description: |-
+                                          operator represents a key's relationship to a set of values.
+                                          Valid operators are In, NotIn, Exists and DoesNotExist.
+                                        type: string
+                                      values:
+                                        description: |-
+                                          values is an array of string values. If the operator is In or NotIn,
+                                          the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                          the values array must be empty. This array is replaced during a strategic
+                                          merge patch.
+                                        items:
+                                          type: string
+                                        type: array
+                                        x-kubernetes-list-type: atomic
+                                    required:
+                                    - key
+                                    - operator
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                    map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                    operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                  type: object
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            timeout:
+                              type: string
+                          required:
+                          - command
+                          - name
+                          - namespace
+                          type: object
+                        type: array
+                      pre:
+                        items:
+                          properties:
+                            command:
+                              items:
+                                type: string
+                              type: array
+                            container:
+                              type: string
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            onError:
+                              enum:
+                              - Fail
+                              - Continue
+                              type: string
+                            podSelector:
+                              description: |-
+                                A label selector is a label query over a set of resources. The result of matchLabels and
+                                matchExpressions are ANDed. An empty label selector matches all objects. A null
+                                label selector matches no objects.
+                              properties:
+                                matchExpressions:
+                                  description: matchExpressions is a list of label
+                                    selector requirements. The requirements are ANDed.
+                                  items:
+                                    description: |-
+                                      A label selector requirement is a selector that contains values, a key, and an operator that
+                                      relates the key and values.
+                                    properties:
+                                      key:
+                                        description: key is the label key that the
+                                          selector applies to.
+                                        type: string
+                                      operator:
+                                        description: |-
+                                          operator represents a key's relationship to a set of values.
+                                          Valid operators are In, NotIn, Exists and DoesNotExist.
+                                        type: string
+                                      values:
+                                        description: |-
+                                          values is an array of string values. If the operator is In or NotIn,
+                                          the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                          the values array must be empty. This array is replaced during a strategic
+                                          merge patch.
+                                        items:
+                                          type: string
+                                        type: array
+                                        x-kubernetes-list-type: atomic
+                                    required:
+                                    - key
+                                    - operator
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                    map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                    operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                  type: object
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            timeout:
+                              type: string
+                          required:
+                          - command
+                          - name
+                          - namespace
+                          type: object
+                        type: array
+                    type: object
+                  includeCRDs:
+                    type: boolean
+                  includeClusterResources:
+                    type: boolean
+                  includeCustomResources:
+                    type: boolean
+                  includeNamespaces:
+                    items:
+                      type: string
+                    type: array
+                  includeSecrets:
+                    type: boolean
+                  labelSelector:
+                    description: |-
+                      A label selector is a label query over a set of resources. The result of matchLabels and
+                      matchExpressions are ANDed. An empty label selector matches all objects. A null
+                      label selector matches no objects.
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
+                        items:
+                          description: |-
+                            A label selector requirement is a selector that contains values, a key, and an operator that
+                            relates the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: |-
+                                operator represents a key's relationship to a set of values.
+                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: |-
+                                values is an array of string values. If the operator is In or NotIn,
+                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced during a strategic
+                                merge patch.
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                          map is equivalent to an element of matchExpressions, whose key field is "key", the
+                          operator is "In", and the values array contains only "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  mode:
+                    enum:
+                    - Cluster
+                    - Namespace
+                    type: string
+                  projectRef:
+                    default: _platform
+                    type: string
+                  pvc:
+                    properties:
+                      enabled:
+                        default: true
+                        type: boolean
+                      exclude:
+                        items:
+                          type: string
+                        type: array
+                      failurePolicy:
+                        default: ContinueAndMarkPartial
+                        enum:
+                        - FailFast
+                        - ContinueAndMarkPartial
+                        type: string
+                      include:
+                        items:
+                          type: string
+                        type: array
+                      labelSelector:
+                        description: |-
+                          A label selector is a label query over a set of resources. The result of matchLabels and
+                          matchExpressions are ANDed. An empty label selector matches all objects. A null
+                          label selector matches no objects.
+                        properties:
+                          matchExpressions:
+                            description: matchExpressions is a list of label selector
+                              requirements. The requirements are ANDed.
+                            items:
+                              description: |-
+                                A label selector requirement is a selector that contains values, a key, and an operator that
+                                relates the key and values.
+                              properties:
+                                key:
+                                  description: key is the label key that the selector
+                                    applies to.
+                                  type: string
+                                operator:
+                                  description: |-
+                                    operator represents a key's relationship to a set of values.
+                                    Valid operators are In, NotIn, Exists and DoesNotExist.
+                                  type: string
+                                values:
+                                  description: |-
+                                    values is an array of string values. If the operator is In or NotIn,
+                                    the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                    the values array must be empty. This array is replaced during a strategic
+                                    merge patch.
+                                  items:
+                                    type: string
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                              required:
+                              - key
+                              - operator
+                              type: object
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          matchLabels:
+                            additionalProperties:
+                              type: string
+                            description: |-
+                              matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                              map is equivalent to an element of matchExpressions, whose key field is "key", the
+                              operator is "In", and the values array contains only "value". The requirements are ANDed.
+                            type: object
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      lifecycle:
+                        default: RetainAfterRecordDeletion
+                        enum:
+                        - DeleteWithRecord
+                        - RetainAfterRecordDeletion
+                        type: string
+                      snapshotClassMapping:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      snapshotClassName:
+                        type: string
+                      snapshotTimeout:
+                        default: 10m
+                        type: string
+                    type: object
+                  resources:
+                    properties:
+                      exclude:
+                        items:
+                          type: string
+                        type: array
+                      excludeCluster:
+                        items:
+                          type: string
+                        type: array
+                      include:
+                        items:
+                          type: string
+                        type: array
+                      includeCluster:
+                        items:
+                          type: string
+                        type: array
+                    type: object
+                  tenantRef:
+                    type: string
+                required:
+                - clusterRef
+                - mode
+                - projectRef
+                type: object
+              tenantRef:
+                type: string
+              timeout:
+                default: 4h
+                type: string
+              trigger:
+                enum:
+                - Manual
+                - Schedule
+                - Retry
+                - Clone
+                type: string
+            required:
+            - clusterRef
+            - projectRef
+            - repositoryRef
+            - scopeRef
+            - trigger
+            type: object
+          status:
+            properties:
+              archiveChecksum:
+                type: string
+              archivePath:
+                type: string
+              attempt:
+                format: int32
+                type: integer
+              backupBytes:
+                format: int64
+                type: integer
+              backupID:
+                type: string
+              checkpoints:
+                items:
+                  properties:
+                    completed:
+                      type: boolean
+                    externalID:
+                      type: string
+                    key:
+                      type: string
+                    step:
+                      type: string
+                    updatedAt:
+                      format: date-time
+                      type: string
+                  required:
+                  - key
+                  - step
+                  - updatedAt
+                  type: object
+                type: array
+              completedAt:
+                format: date-time
+                type: string
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              createdAt:
+                format: date-time
+                type: string
+              errorCode:
+                type: string
+              errors:
+                items:
+                  properties:
+                    at:
+                      format: date-time
+                      type: string
+                    code:
+                      type: string
+                    message:
+                      type: string
+                    objectRef:
+                      properties:
+                        group:
+                          type: string
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        resource:
+                          type: string
+                        version:
+                          type: string
+                      required:
+                      - name
+                      - resource
+                      type: object
+                    retryable:
+                      type: boolean
+                  required:
+                  - at
+                  - code
+                  - message
+                  type: object
+                type: array
+              executionNode:
+                type: string
+              lastHeartbeatTime:
+                format: date-time
+                type: string
+              message:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              progress:
+                properties:
+                  bytesEstimated:
+                    format: int64
+                    type: integer
+                  bytesProcessed:
+                    format: int64
+                    type: integer
+                  bytesUploaded:
+                    format: int64
+                    type: integer
+                  failedResources:
+                    format: int64
+                    type: integer
+                  failedSnapshots:
+                    format: int64
+                    type: integer
+                  percent:
+                    format: int32
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  processedPVCs:
+                    format: int64
+                    type: integer
+                  processedResources:
+                    format: int64
+                    type: integer
+                  succeededResources:
+                    format: int64
+                    type: integer
+                  succeededSnapshots:
+                    format: int64
+                    type: integer
+                  totalPVCs:
+                    format: int64
+                    type: integer
+                  totalResources:
+                    format: int64
+                    type: integer
+                type: object
+              reason:
+                type: string
+              recordRef:
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+              snapshots:
+                items:
+                  properties:
+                    creationTime:
+                      format: date-time
+                      type: string
+                    driver:
+                      type: string
+                    error:
+                      type: string
+                    phase:
+                      type: string
+                    pvcName:
+                      type: string
+                    pvcNamespace:
+                      type: string
+                    readyToUse:
+                      type: boolean
+                    restoreSize:
+                      format: int64
+                      type: integer
+                    snapshotClass:
+                      type: string
+                    snapshotHandle:
+                      type: string
+                    storageClass:
+                      type: string
+                    volumeSnapshotContentName:
+                      type: string
+                    volumeSnapshotName:
+                      type: string
+                  required:
+                  - pvcName
+                  - pvcNamespace
+                  type: object
+                type: array
+              startedAt:
+                format: date-time
+                type: string
+              step:
+                type: string
+              warnings:
+                format: int32
+                type: integer
+              workerName:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.3
+  name: restoretasks.protection.platform.io
+spec:
+  group: protection.platform.io
+  names:
+    kind: RestoreTask
+    listKind: RestoreTaskList
+    plural: restoretasks
+    shortNames:
+    - rtask
+    singular: restoretask
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.backupRecordRef.name
+      name: Record
+      type: string
+    - jsonPath: .spec.targetClusterRef
+      name: Target
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.progress.processed
+      name: Processed
+      type: integer
+    - jsonPath: .status.startedAt
+      name: Started
+      type: date
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              backupRecordRef:
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+              cancelReason:
+                type: string
+              cancelRequested:
+                type: boolean
+              clusterRef:
+                minLength: 1
+                type: string
+              conflictPolicy:
+                properties:
+                  allowRecreate:
+                    type: boolean
+                  default:
+                    default: Skip
+                    enum:
+                    - Skip
+                    - Overwrite
+                    - Rename
+                    - Fail
+                    type: string
+                  highRiskConfirmed:
+                    type: boolean
+                  perResource:
+                    additionalProperties:
+                      type: string
+                    type: object
+                type: object
+              dryRun:
+                type: boolean
+              failurePolicy:
+                default: Continue
+                enum:
+                - FailFast
+                - Continue
+                type: string
+              metadataOnly:
+                type: boolean
+              mode:
+                enum:
+                - Original
+                - NewNamespace
+                - Mapping
+                type: string
+              namespaceMapping:
+                additionalProperties:
+                  type: string
+                type: object
+              parentTaskRef:
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+              planHash:
+                type: string
+              projectRef:
+                default: _platform
+                type: string
+              resourceSelection:
+                properties:
+                  exclude:
+                    items:
+                      type: string
+                    type: array
+                  include:
+                    items:
+                      type: string
+                    type: array
+                  includeClusterResources:
+                    type: boolean
+                type: object
+              restorePVC:
+                type: boolean
+              storageClassMapping:
+                additionalProperties:
+                  type: string
+                type: object
+              targetClusterRef:
+                type: string
+              tenantRef:
+                type: string
+              timeout:
+                default: 4h
+                type: string
+              trigger:
+                default: Manual
+                enum:
+                - Manual
+                - Retry
+                type: string
+            required:
+            - backupRecordRef
+            - clusterRef
+            - projectRef
+            - targetClusterRef
+            type: object
+          status:
+            properties:
+              checkpoints:
+                items:
+                  properties:
+                    completed:
+                      type: boolean
+                    externalID:
+                      type: string
+                    key:
+                      type: string
+                    step:
+                      type: string
+                    updatedAt:
+                      format: date-time
+                      type: string
+                  required:
+                  - key
+                  - step
+                  - updatedAt
+                  type: object
+                type: array
+              completedAt:
+                format: date-time
+                type: string
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              createdAt:
+                format: date-time
+                type: string
+              errorCode:
+                type: string
+              errors:
+                items:
+                  properties:
+                    at:
+                      format: date-time
+                      type: string
+                    code:
+                      type: string
+                    message:
+                      type: string
+                    objectRef:
+                      properties:
+                        group:
+                          type: string
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        resource:
+                          type: string
+                        version:
+                          type: string
+                      required:
+                      - name
+                      - resource
+                      type: object
+                    retryable:
+                      type: boolean
+                  required:
+                  - at
+                  - code
+                  - message
+                  type: object
+                type: array
+              lastHeartbeatTime:
+                format: date-time
+                type: string
+              message:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              plan:
+                properties:
+                  blockingCount:
+                    format: int64
+                    type: integer
+                  conflictCount:
+                    format: int64
+                    type: integer
+                  generatedAt:
+                    format: date-time
+                    type: string
+                  hash:
+                    type: string
+                  reference:
+                    type: string
+                  totalObjects:
+                    format: int64
+                    type: integer
+                  totalPVCs:
+                    format: int64
+                    type: integer
+                  warningCount:
+                    format: int64
+                    type: integer
+                type: object
+              progress:
+                properties:
+                  boundPVCs:
+                    format: int64
+                    type: integer
+                  created:
+                    format: int64
+                    type: integer
+                  failed:
+                    format: int64
+                    type: integer
+                  failedPVCs:
+                    format: int64
+                    type: integer
+                  processed:
+                    format: int64
+                    type: integer
+                  renamed:
+                    format: int64
+                    type: integer
+                  skipped:
+                    format: int64
+                    type: integer
+                  total:
+                    format: int64
+                    type: integer
+                  totalPVCs:
+                    format: int64
+                    type: integer
+                  updated:
+                    format: int64
+                    type: integer
+                type: object
+              reason:
+                type: string
+              residualResources:
+                items:
+                  properties:
+                    group:
+                      type: string
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                    resource:
+                      type: string
+                    version:
+                      type: string
+                  required:
+                  - name
+                  - resource
+                  type: object
+                type: array
+              startedAt:
+                format: date-time
+                type: string
+              step:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backup-restore-operator
+  namespace: backup-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: backup-restore-operator
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  - persistentvolumeclaims
+  - secrets
+  - serviceaccounts
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - storageclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  - deployments
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - delete
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  - networkpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - delete
+- apiGroups:
+  - protection.platform.io
+  resources:
+  - backuppluginconfigs
+  - backuppolicies
+  - backuprecords
+  - backuprepositories
+  - backupscopes
+  - backuptasks
+  - restoretasks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - protection.platform.io
+  resources:
+  - backuppluginconfigs/status
+  - backuppolicies/status
+  - backuprecords/status
+  - backuprepositories/status
+  - backupscopes/status
+  - backuptasks/status
+  - restoretasks/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - protection.platform.io
+  resources:
+  - backuppolicies/finalizers
+  - backuprecords/finalizers
+  - backuprepositories/finalizers
+  - backupscopes/finalizers
+  - backuptasks/finalizers
+  - restoretasks/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - snapshot.storage.k8s.io
+  resources:
+  - volumesnapshotclasses
+  - volumesnapshotcontents
+  - volumesnapshots
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: backup-restore-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: backup-restore-operator
+subjects:
+- kind: ServiceAccount
+  name: backup-restore-operator
+  namespace: backup-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup-restore-webhook
+  namespace: backup-system
+spec:
+  ports:
+  - name: https
+    port: 443
+    targetPort: webhook
+  selector:
+    app.kubernetes.io/name: backup-restore-operator
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: backup-restore-operator
+  name: backup-restore-operator
+  namespace: backup-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backup-restore-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: backup-restore-operator
+    spec:
+      containers:
+      - args:
+        - --leader-elect=true
+        - --cluster-ref=cluster-a
+        - --workspace=/workspace
+        - --max-concurrent-backups=3
+        - --max-concurrent-restores=1
+        - --webhook-cert-dir=/tmp/k8s-webhook-server/serving-certs
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        image: backup-restore-operator:dev
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+        name: manager
+        ports:
+        - containerPort: 8080
+          name: metrics
+        - containerPort: 8081
+          name: health
+        - containerPort: 9443
+          name: webhook
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health
+        resources:
+          limits:
+            cpu: "2"
+            memory: 2Gi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /workspace
+          name: workspace
+        - mountPath: /tmp
+          name: tmp
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: webhook-cert
+          readOnly: true
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: backup-restore-operator
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - emptyDir: {}
+        name: workspace
+      - emptyDir: {}
+        name: tmp
+      - name: webhook-cert
+        secret:
+          secretName: backup-restore-webhook-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: backup-restore-serving-cert
+  namespace: backup-system
+spec:
+  dnsNames:
+  - backup-restore-webhook.backup-system.svc
+  - backup-restore-webhook.backup-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: backup-restore-selfsigned
+  secretName: backup-restore-webhook-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: backup-restore-selfsigned
+  namespace: backup-system
+spec:
+  selfSigned: {}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: backup-system/backup-restore-serving-cert
+  name: mutating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /mutate-protection-platform-io-v1alpha1-backuppluginconfig
+  failurePolicy: Fail
+  name: mbackuppluginconfig.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuppluginconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /mutate-protection-platform-io-v1alpha1-backuppolicy
+  failurePolicy: Fail
+  name: mbackuppolicy.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuppolicies
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /mutate-protection-platform-io-v1alpha1-backuprepository
+  failurePolicy: Fail
+  name: mbackuprepository.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuprepositories
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /mutate-protection-platform-io-v1alpha1-backupscope
+  failurePolicy: Fail
+  name: mbackupscope.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backupscopes
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /mutate-protection-platform-io-v1alpha1-backuptask
+  failurePolicy: Fail
+  name: mbackuptask.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuptasks
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /mutate-protection-platform-io-v1alpha1-restoretask
+  failurePolicy: Fail
+  name: mrestoretask.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - restoretasks
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: backup-system/backup-restore-serving-cert
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /validate-protection-platform-io-v1alpha1-backuppluginconfig
+  failurePolicy: Fail
+  name: vbackuppluginconfig.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuppluginconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /validate-protection-platform-io-v1alpha1-backuppolicy
+  failurePolicy: Fail
+  name: vbackuppolicy.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuppolicies
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /validate-protection-platform-io-v1alpha1-backuprecord
+  failurePolicy: Fail
+  name: vbackuprecord.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - backuprecords
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /validate-protection-platform-io-v1alpha1-backuprepository
+  failurePolicy: Fail
+  name: vbackuprepository.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuprepositories
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /validate-protection-platform-io-v1alpha1-backupscope
+  failurePolicy: Fail
+  name: vbackupscope.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backupscopes
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /validate-protection-platform-io-v1alpha1-backuptask
+  failurePolicy: Fail
+  name: vbackuptask.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuptasks
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /validate-protection-platform-io-v1alpha1-restoretask
+  failurePolicy: Fail
+  name: vrestoretask.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - restoretasks
+  sideEffects: None
