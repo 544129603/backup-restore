@@ -1,0 +1,571 @@
+﻿---
+# Source: backup-restore-operator/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backup-restore-operator
+  namespace: backup-system
+  labels:
+    app.kubernetes.io/name: backup-restore-operator
+    app.kubernetes.io/instance: br
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: backup-restore-operator/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: backup-restore-operator
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: [get, list, watch, create, update, patch]
+- apiGroups: [""]
+  resources: [configmaps, services]
+  verbs: [delete]
+- apiGroups: [apps]
+  resources: [deployments, statefulsets, daemonsets]
+  verbs: [delete]
+- apiGroups: [batch]
+  resources: [jobs, cronjobs]
+  verbs: [delete]
+- apiGroups: [networking.k8s.io]
+  resources: [ingresses, networkpolicies]
+  verbs: [delete]
+- apiGroups: [autoscaling]
+  resources: [horizontalpodautoscalers]
+  verbs: [delete]
+- apiGroups: [policy]
+  resources: [poddisruptionbudgets]
+  verbs: [delete]
+- apiGroups: [rbac.authorization.k8s.io]
+  resources: [roles, rolebindings]
+  verbs: [delete]
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - namespaces
+  - persistentvolumeclaims
+  - secrets
+  - serviceaccounts
+  - services
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - storageclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  - deployments
+  - statefulsets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  - jobs
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  - networkpolicies
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - protection.platform.io
+  resources:
+  - backuppluginconfigs
+  - backuppolicies
+  - backuprecords
+  - backuprepositories
+  - backupscopes
+  - backuptasks
+  - restoretasks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - protection.platform.io
+  resources:
+  - backuppluginconfigs/status
+  - backuppolicies/status
+  - backuprecords/status
+  - backuprepositories/status
+  - backupscopes/status
+  - backuptasks/status
+  - restoretasks/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - protection.platform.io
+  resources:
+  - backuppolicies/finalizers
+  - backuprecords/finalizers
+  - backuprepositories/finalizers
+  - backupscopes/finalizers
+  - backuptasks/finalizers
+  - restoretasks/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - snapshot.storage.k8s.io
+  resources:
+  - volumesnapshotclasses
+  - volumesnapshotcontents
+  - volumesnapshots
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+# Source: backup-restore-operator/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: backup-restore-operator-br
+  labels:
+    app.kubernetes.io/name: backup-restore-operator
+    app.kubernetes.io/instance: br
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: backup-restore-operator
+subjects:
+- kind: ServiceAccount
+  name: backup-restore-operator
+  namespace: backup-system
+---
+# Source: backup-restore-operator/templates/metrics-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup-restore-metrics
+  namespace: backup-system
+  labels:
+    app.kubernetes.io/name: backup-restore-operator
+    app.kubernetes.io/instance: br
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    app.kubernetes.io/name: backup-restore-operator
+    app.kubernetes.io/instance: br
+  ports:
+  - {name: metrics, port: 8080, targetPort: metrics}
+---
+# Source: backup-restore-operator/templates/webhook.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup-restore-webhook
+  namespace: backup-system
+  labels:
+    app.kubernetes.io/name: backup-restore-operator
+    app.kubernetes.io/instance: br
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    app.kubernetes.io/name: backup-restore-operator
+    app.kubernetes.io/instance: br
+  ports:
+  - {name: https, port: 443, targetPort: webhook}
+---
+# Source: backup-restore-operator/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backup-restore-operator
+  namespace: backup-system
+  labels:
+    app.kubernetes.io/name: backup-restore-operator
+    app.kubernetes.io/instance: br
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backup-restore-operator
+      app.kubernetes.io/instance: br
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: backup-restore-operator
+        app.kubernetes.io/instance: br
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: backup-restore-operator
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+      - name: manager
+        image: "backup-restore-operator:dev"
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef: {fieldPath: spec.nodeName}
+        - name: POD_NAME
+          valueFrom:
+            fieldRef: {fieldPath: metadata.name}
+        args:
+        - --leader-elect=true
+        - --cluster-ref=cluster-a
+        - --workspace=/workspace
+        - --max-concurrent-backups=3
+        - --max-concurrent-restores=1
+        - --enable-webhooks=true
+        ports:
+        - {name: metrics, containerPort: 8080}
+        - {name: health, containerPort: 8081}
+        - {name: webhook, containerPort: 9443}
+        livenessProbe: {httpGet: {path: /healthz, port: health}}
+        readinessProbe: {httpGet: {path: /readyz, port: health}}
+        resources:
+          limits:
+            cpu: "2"
+            memory: 2Gi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities: {drop: ["ALL"]}
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - {name: workspace, mountPath: /workspace}
+        - {name: tmp, mountPath: /tmp}
+        - {name: webhook-cert, mountPath: /tmp/k8s-webhook-server/serving-certs, readOnly: true}
+      volumes:
+      - name: workspace
+        emptyDir:
+          sizeLimit: 20Gi
+      - {name: tmp, emptyDir: {}}
+      - name: webhook-cert
+        secret: {secretName: backup-restore-webhook-cert}
+      nodeSelector:
+        {}
+      tolerations:
+        []
+      affinity:
+        {}
+---
+# Source: backup-restore-operator/templates/pluginconfig.yaml
+apiVersion: protection.platform.io/v1alpha1
+kind: BackupPluginConfig
+metadata:
+  name: cluster
+spec:
+  concurrency:
+    maxBackupTasks: 3
+    maxRestoreTasks: 1
+  kubernetesClient:
+    pageSize: 500
+  garbageCollection:
+    terminalTaskTTLDays: 90
+---
+# Source: backup-restore-operator/templates/webhook.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: backup-restore-serving-cert
+  namespace: backup-system
+spec:
+  secretName: backup-restore-webhook-cert
+  issuerRef: {kind: Issuer, name: backup-restore-selfsigned}
+  dnsNames:
+  - backup-restore-webhook.backup-system.svc
+  - backup-restore-webhook.backup-system.svc.cluster.local
+---
+# Source: backup-restore-operator/templates/webhook.yaml
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: backup-restore-selfsigned
+  namespace: backup-system
+spec: {selfSigned: {}}
+---
+# Source: backup-restore-operator/templates/webhook.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: backup-restore-mutating
+  annotations:
+    cert-manager.io/inject-ca-from: backup-system/backup-restore-serving-cert
+webhooks:
+- name: mbackuprepository.protection.platform.io
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /mutate-protection-platform-io-v1alpha1-backuprepository
+  rules:
+  - apiGroups: [protection.platform.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [backuprepositories]
+- name: mbackupscope.protection.platform.io
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /mutate-protection-platform-io-v1alpha1-backupscope
+  rules:
+  - apiGroups: [protection.platform.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [backupscopes]
+- name: mbackuppolicy.protection.platform.io
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /mutate-protection-platform-io-v1alpha1-backuppolicy
+  rules:
+  - apiGroups: [protection.platform.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [backuppolicies]
+- name: mbackuptask.protection.platform.io
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /mutate-protection-platform-io-v1alpha1-backuptask
+  rules:
+  - apiGroups: [protection.platform.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [backuptasks]
+- name: mrestoretask.protection.platform.io
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /mutate-protection-platform-io-v1alpha1-restoretask
+  rules:
+  - apiGroups: [protection.platform.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [restoretasks]
+- name: mbackuppluginconfig.protection.platform.io
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /mutate-protection-platform-io-v1alpha1-backuppluginconfig
+  rules:
+  - apiGroups: [protection.platform.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [backuppluginconfigs]
+---
+# Source: backup-restore-operator/templates/webhook.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: backup-restore-validating
+  annotations:
+    cert-manager.io/inject-ca-from: backup-system/backup-restore-serving-cert
+webhooks:
+- name: vbackuprepository.protection.platform.io
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /validate-protection-platform-io-v1alpha1-backuprepository
+  rules:
+  - apiGroups: [protection.platform.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [backuprepositories]
+- name: vbackupscope.protection.platform.io
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /validate-protection-platform-io-v1alpha1-backupscope
+  rules:
+  - apiGroups: [protection.platform.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [backupscopes]
+- name: vbackuppolicy.protection.platform.io
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /validate-protection-platform-io-v1alpha1-backuppolicy
+  rules:
+  - apiGroups: [protection.platform.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [backuppolicies]
+- name: vbackuptask.protection.platform.io
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /validate-protection-platform-io-v1alpha1-backuptask
+  rules:
+  - apiGroups: [protection.platform.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [backuptasks]
+- name: vbackuprecord.protection.platform.io
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /validate-protection-platform-io-v1alpha1-backuprecord
+  rules:
+  - apiGroups: [protection.platform.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE, DELETE]
+    resources: [backuprecords]
+- name: vrestoretask.protection.platform.io
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /validate-protection-platform-io-v1alpha1-restoretask
+  rules:
+  - apiGroups: [protection.platform.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [restoretasks]
+- name: vbackuppluginconfig.protection.platform.io
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: backup-system
+      path: /validate-protection-platform-io-v1alpha1-backuppluginconfig
+  rules:
+  - apiGroups: [protection.platform.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [backuppluginconfigs]

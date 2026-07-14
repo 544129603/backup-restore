@@ -1,0 +1,45 @@
+# Local Docker Desktop profile. Do not use this file unchanged in production.
+image:
+  repository: backup-restore-operator
+  tag: dev-local-1
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+leaderElection: true
+clusterRef: docker-desktop
+
+webhook:
+  enabled: true
+  certManager:
+    enabled: true
+    issuerName: backup-restore-selfsigned
+  tlsSecretName: backup-restore-webhook-cert
+
+workspace:
+  mountPath: /workspace
+  emptyDir:
+    sizeLimit: 20Gi
+  existingClaim: ""
+
+localRepositoryMount:
+  enabled: true
+  hostPath: /var/lib/backup-restore-operator/repository
+  mountPath: /repository
+  type: DirectoryOrCreate
+  initPermissions:
+    enabled: true
+    image: busybox:1.37.0
+    uid: 65532
+    gid: 65532
+    mode: "0770"
+
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {cpu: "2", memory: 2Gi}
+
+pluginConfig:
+  create: true
+  maxBackupTasks: 3
+  maxRestoreTasks: 1
+  pageSize: 500
+  terminalTaskTTLDays: 90
