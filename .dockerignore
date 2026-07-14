@@ -1,0 +1,8 @@
+.git
+.github
+.tools
+bin
+dist
+cover.out
+test/e2e/artifacts
+docs

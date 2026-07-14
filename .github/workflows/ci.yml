@@ -1,0 +1,30 @@
+name: ci
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with: {go-version: '1.23.12', cache: true}
+    - uses: azure/setup-helm@v4
+      with: {version: v3.19.0}
+    - name: Generate
+      run: make generate manifests
+    - name: Verify generated files
+      run: git diff --exit-code
+    - name: Unit and race tests
+      run: go test -race ./api/... ./internal/... -coverprofile=cover.out
+    - name: EnvTest
+      shell: pwsh
+      run: ./hack/test-integration.ps1 -KubernetesVersion 1.32.0
+    - name: Vet and build
+      run: go vet ./... && go build -trimpath ./cmd/manager
+    - name: Helm lint and render
+      run: helm lint charts/backup-restore-operator && helm template br charts/backup-restore-operator --namespace backup-system >/dev/null
+    - name: Container build
+      run: docker build -t backup-restore-operator:ci .

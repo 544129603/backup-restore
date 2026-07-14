@@ -1,0 +1,16 @@
+domain: platform.io
+layout:
+- go.kubebuilder.io/v4
+projectName: backup-restore-operator
+repo: github.com/example/backup-restore-operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: false
+  controller: true
+  domain: platform.io
+  group: protection
+  kind: BackupRepository
+  path: github.com/example/backup-restore-operator/api/v1alpha1
+  version: v1alpha1
+version: "3"

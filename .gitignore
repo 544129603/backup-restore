@@ -1,0 +1,11 @@
+/bin/
+/dist/
+/cover.out
+/cover
+/manager.exe
+/test/e2e/artifacts/
+/.tools/
+.idea/
+.vscode/
+*.test
+*.out
