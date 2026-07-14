@@ -1,0 +1,87 @@
+{{- if .Values.webhook.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup-restore-webhook
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "backup-restore.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "backup-restore.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+  - {name: https, port: 443, targetPort: webhook}
+{{- if .Values.webhook.certManager.enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ .Values.webhook.certManager.issuerName }}
+  namespace: {{ .Release.Namespace }}
+spec: {selfSigned: {}}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: backup-restore-serving-cert
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: {{ .Values.webhook.tlsSecretName }}
+  issuerRef: {kind: Issuer, name: {{ .Values.webhook.certManager.issuerName }}}
+  dnsNames:
+  - backup-restore-webhook.{{ .Release.Namespace }}.svc
+  - backup-restore-webhook.{{ .Release.Namespace }}.svc.cluster.local
+{{- end }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: backup-restore-mutating
+  {{- if .Values.webhook.certManager.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/backup-restore-serving-cert
+  {{- end }}
+webhooks:
+{{- range $entry := list (dict "kind" "backuprepository" "resource" "backuprepositories") (dict "kind" "backupscope" "resource" "backupscopes") (dict "kind" "backuppolicy" "resource" "backuppolicies") (dict "kind" "backuptask" "resource" "backuptasks") (dict "kind" "restoretask" "resource" "restoretasks") (dict "kind" "backuppluginconfig" "resource" "backuppluginconfigs") }}
+- name: m{{ $entry.kind }}.protection.platform.io
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: {{ $.Release.Namespace }}
+      path: /mutate-protection-platform-io-v1alpha1-{{ $entry.kind }}
+  rules:
+  - apiGroups: [protection.platform.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE]
+    resources: [{{ $entry.resource }}]
+{{- end }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: backup-restore-validating
+  {{- if .Values.webhook.certManager.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/backup-restore-serving-cert
+  {{- end }}
+webhooks:
+{{- range $entry := list (dict "kind" "backuprepository" "resource" "backuprepositories") (dict "kind" "backupscope" "resource" "backupscopes") (dict "kind" "backuppolicy" "resource" "backuppolicies") (dict "kind" "backuptask" "resource" "backuptasks") (dict "kind" "backuprecord" "resource" "backuprecords") (dict "kind" "restoretask" "resource" "restoretasks") (dict "kind" "backuppluginconfig" "resource" "backuppluginconfigs") }}
+- name: v{{ $entry.kind }}.protection.platform.io
+  admissionReviewVersions: [v1]
+  sideEffects: None
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: backup-restore-webhook
+      namespace: {{ $.Release.Namespace }}
+      path: /validate-protection-platform-io-v1alpha1-{{ $entry.kind }}
+  rules:
+  - apiGroups: [protection.platform.io]
+    apiVersions: [v1alpha1]
+    operations: [CREATE, UPDATE{{- if eq $entry.kind "backuprecord" }}, DELETE{{- end }}]
+    resources: [{{ $entry.resource }}]
+{{- end }}
+{{- end }}

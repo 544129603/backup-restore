@@ -1,0 +1,14 @@
+{{- if .Values.pluginConfig.create }}
+apiVersion: protection.platform.io/v1alpha1
+kind: BackupPluginConfig
+metadata:
+  name: cluster
+spec:
+  concurrency:
+    maxBackupTasks: {{ .Values.pluginConfig.maxBackupTasks }}
+    maxRestoreTasks: {{ .Values.pluginConfig.maxRestoreTasks }}
+  kubernetesClient:
+    pageSize: {{ .Values.pluginConfig.pageSize }}
+  garbageCollection:
+    terminalTaskTTLDays: {{ .Values.pluginConfig.terminalTaskTTLDays }}
+{{- end }}

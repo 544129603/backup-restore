@@ -1,0 +1,5 @@
+The backup and restore Operator is installed in {{ .Release.Namespace }}.
+{{- if .Values.webhook.certManager.enabled }}
+Admission TLS is managed by cert-manager; wait for Certificate/backup-restore-serving-cert to become Ready.
+{{- end }}
+Create credentials as Kubernetes Secrets. Never place passwords, private keys, or encryption keys in a CR spec.

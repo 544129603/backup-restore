@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "backup-restore.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "backup-restore.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "backup-restore.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels: {{- include "backup-restore.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "backup-restore.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      {{- if and .Values.localRepositoryMount.enabled .Values.localRepositoryMount.initPermissions.enabled }}
+      initContainers:
+      - name: initialize-local-repository
+        image: {{ .Values.localRepositoryMount.initPermissions.image | quote }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - sh
+        - -ec
+        - |
+          current_uid="$(stat -c %u {{ .Values.localRepositoryMount.mountPath }})"
+          current_gid="$(stat -c %g {{ .Values.localRepositoryMount.mountPath }})"
+          if [ "$current_uid" != "{{ .Values.localRepositoryMount.initPermissions.uid }}" ] || [ "$current_gid" != "{{ .Values.localRepositoryMount.initPermissions.gid }}" ]; then
+            chown -R {{ .Values.localRepositoryMount.initPermissions.uid }}:{{ .Values.localRepositoryMount.initPermissions.gid }} {{ .Values.localRepositoryMount.mountPath }}
+            chmod {{ .Values.localRepositoryMount.initPermissions.mode }} {{ .Values.localRepositoryMount.mountPath }}
+          fi
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+            add: ["CHOWN", "FOWNER"]
+        volumeMounts:
+        - {name: local-repository, mountPath: {{ .Values.localRepositoryMount.mountPath }}}
+      {{- end }}
+      containers:
+      - name: manager
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef: {fieldPath: spec.nodeName}
+        - name: POD_NAME
+          valueFrom:
+            fieldRef: {fieldPath: metadata.name}
+        args:
+        - --leader-elect={{ .Values.leaderElection }}
+        - --cluster-ref={{ required "clusterRef is required" .Values.clusterRef }}
+        - --workspace={{ .Values.workspace.mountPath }}
+        - --max-concurrent-backups={{ .Values.pluginConfig.maxBackupTasks }}
+        - --max-concurrent-restores={{ .Values.pluginConfig.maxRestoreTasks }}
+        - --enable-webhooks={{ .Values.webhook.enabled }}
+        ports:
+        - {name: metrics, containerPort: 8080}
+        - {name: health, containerPort: 8081}
+        {{- if .Values.webhook.enabled }}
+        - {name: webhook, containerPort: 9443}
+        {{- end }}
+        livenessProbe: {httpGet: {path: /healthz, port: health}}
+        readinessProbe: {httpGet: {path: /readyz, port: health}}
+        resources: {{- toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities: {drop: ["ALL"]}
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - {name: workspace, mountPath: {{ .Values.workspace.mountPath }}}
+        - {name: tmp, mountPath: /tmp}
+        {{- if .Values.webhook.enabled }}
+        - {name: webhook-cert, mountPath: /tmp/k8s-webhook-server/serving-certs, readOnly: true}
+        {{- end }}
+        {{- if .Values.localRepositoryMount.enabled }}
+        - {name: local-repository, mountPath: {{ .Values.localRepositoryMount.mountPath }}}
+        {{- end }}
+      volumes:
+      - name: workspace
+        {{- if .Values.workspace.existingClaim }}
+        persistentVolumeClaim: {claimName: {{ .Values.workspace.existingClaim }}}
+        {{- else }}
+        emptyDir: {{- toYaml .Values.workspace.emptyDir | nindent 10 }}
+        {{- end }}
+      - {name: tmp, emptyDir: {}}
+      {{- if .Values.webhook.enabled }}
+      - name: webhook-cert
+        secret: {secretName: {{ .Values.webhook.tlsSecretName }}}
+      {{- end }}
+      {{- if .Values.localRepositoryMount.enabled }}
+      - name: local-repository
+        hostPath: {path: {{ .Values.localRepositoryMount.hostPath }}, type: {{ .Values.localRepositoryMount.type }}}
+      {{- end }}
+      nodeSelector: {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations: {{- toYaml .Values.tolerations | nindent 8 }}
+      affinity: {{- toYaml .Values.affinity | nindent 8 }}
