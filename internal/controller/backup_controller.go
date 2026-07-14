@@ -65,7 +65,6 @@ type backupMetadata struct {
 	BackupID      string                              `json:"backupID"`
 	TaskName      string                              `json:"taskName"`
 	ClusterRef    string                              `json:"clusterRef"`
-	ProjectRef    string                              `json:"projectRef"`
 	CreatedAt     time.Time                           `json:"createdAt"`
 	FormatVersion string                              `json:"formatVersion"`
 	Snapshots     []protectionv1alpha1.SnapshotResult `json:"snapshots,omitempty"`
@@ -301,7 +300,7 @@ func (r *BackupTaskReconciler) packageBackup(ctx context.Context, task *protecti
 		return ctrl.Result{}, err
 	}
 	payload := filepath.Join(dir, "payload")
-	metadata := backupMetadata{BackupID: string(task.UID), TaskName: task.Name, ClusterRef: task.Spec.ClusterRef, ProjectRef: task.Spec.ProjectRef, CreatedAt: task.CreationTimestamp.Time.UTC(), FormatVersion: backupFormatVersion, Snapshots: task.Status.Snapshots}
+	metadata := backupMetadata{BackupID: string(task.UID), TaskName: task.Name, ClusterRef: task.Spec.ClusterRef, CreatedAt: task.CreationTimestamp.Time.UTC(), FormatVersion: backupFormatVersion, Snapshots: task.Status.Snapshots}
 	if err = writeJSON(filepath.Join(payload, "metadata.json"), metadata); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -518,7 +517,7 @@ func (r *BackupTaskReconciler) generateRecord(ctx context.Context, task *protect
 		if getErr := r.Get(ctx, client.ObjectKey{Name: "kube-system"}, clusterNamespace); getErr == nil {
 			source.ClusterUID = string(clusterNamespace.UID)
 		}
-		record = &protectionv1alpha1.BackupRecord{ObjectMeta: metav1.ObjectMeta{Name: recordName, Labels: map[string]string{protectionv1alpha1.LabelTaskUID: string(task.UID), protectionv1alpha1.LabelCluster: task.Spec.ClusterRef, protectionv1alpha1.LabelProject: task.Spec.ProjectRef}}, Spec: protectionv1alpha1.BackupRecordSpec{ResourceIdentity: task.Spec.ResourceIdentity, BackupID: string(task.UID), SourceTaskRef: protectionv1alpha1.ObjectReference{Name: task.Name, UID: string(task.UID)}, PolicyRef: policyRef, RepositoryRef: task.Spec.RepositoryRef, Source: source, BackupPath: backupRemotePath(task), Checksum: task.Status.ArchiveChecksum, ChecksumAlgorithm: "SHA-256", FormatVersion: backupFormatVersion, OperatorVersion: r.Version, Encryption: encryptionSpec, Inventory: protectionv1alpha1.BackupInventory{ResourceCount: task.Status.Progress.SucceededResources, NamespaceCount: int64(len(namespaces)), PVCCount: task.Status.Progress.TotalPVCs, SnapshotCount: task.Status.Progress.SucceededSnapshots, FailedResourceCount: task.Status.Progress.FailedResources, FailedSnapshotCount: task.Status.Progress.FailedSnapshots, BackupBytes: task.Status.BackupBytes}, Snapshots: task.Status.Snapshots, ContentCompleteness: content, SnapshotLifecycle: task.Spec.ScopeSnapshot.PVC.Lifecycle, ExpiresAt: &expires}}
+		record = &protectionv1alpha1.BackupRecord{ObjectMeta: metav1.ObjectMeta{Name: recordName, Labels: map[string]string{protectionv1alpha1.LabelTaskUID: string(task.UID), protectionv1alpha1.LabelCluster: task.Spec.ClusterRef}}, Spec: protectionv1alpha1.BackupRecordSpec{ResourceIdentity: task.Spec.ResourceIdentity, BackupID: string(task.UID), SourceTaskRef: protectionv1alpha1.ObjectReference{Name: task.Name, UID: string(task.UID)}, PolicyRef: policyRef, RepositoryRef: task.Spec.RepositoryRef, Source: source, BackupPath: backupRemotePath(task), Checksum: task.Status.ArchiveChecksum, ChecksumAlgorithm: "SHA-256", FormatVersion: backupFormatVersion, OperatorVersion: r.Version, Encryption: encryptionSpec, Inventory: protectionv1alpha1.BackupInventory{ResourceCount: task.Status.Progress.SucceededResources, NamespaceCount: int64(len(namespaces)), PVCCount: task.Status.Progress.TotalPVCs, SnapshotCount: task.Status.Progress.SucceededSnapshots, FailedResourceCount: task.Status.Progress.FailedResources, FailedSnapshotCount: task.Status.Progress.FailedSnapshots, BackupBytes: task.Status.BackupBytes}, Snapshots: task.Status.Snapshots, ContentCompleteness: content, SnapshotLifecycle: task.Spec.ScopeSnapshot.PVC.Lifecycle, ExpiresAt: &expires}}
 		if policyRef != nil {
 			record.Labels[protectionv1alpha1.LabelPolicyUID] = policyRef.UID
 		}

@@ -46,7 +46,7 @@ func TestRepositoryControllerWithRealAPIServer(t *testing.T) {
 	t.Cleanup(cancel)
 	go func() { _ = manager.Start(ctx) }()
 	require.True(t, manager.GetCache().WaitForCacheSync(ctx))
-	repository := &protectionv1alpha1.BackupRepository{ObjectMeta: metav1.ObjectMeta{Name: "envtest-local"}, Spec: protectionv1alpha1.BackupRepositorySpec{ResourceIdentity: protectionv1alpha1.ResourceIdentity{ClusterRef: "envtest", ProjectRef: "_platform"}, Type: protectionv1alpha1.RepositoryTypeLocal, Enabled: true, Local: &protectionv1alpha1.LocalRepositorySpec{Mode: protectionv1alpha1.LocalModeHostPath, Path: t.TempDir(), NodeName: "envtest"}, HealthCheckInterval: metav1.Duration{Duration: time.Minute}}}
+	repository := &protectionv1alpha1.BackupRepository{ObjectMeta: metav1.ObjectMeta{Name: "envtest-local"}, Spec: protectionv1alpha1.BackupRepositorySpec{ResourceIdentity: protectionv1alpha1.ResourceIdentity{ClusterRef: "envtest"}, Type: protectionv1alpha1.RepositoryTypeLocal, Enabled: true, Local: &protectionv1alpha1.LocalRepositorySpec{Mode: protectionv1alpha1.LocalModeHostPath, Path: t.TempDir(), NodeName: "envtest"}, HealthCheckInterval: metav1.Duration{Duration: time.Minute}}}
 	require.NoError(t, manager.GetClient().Create(ctx, repository))
 	require.Eventually(t, func() bool {
 		current := &protectionv1alpha1.BackupRepository{}

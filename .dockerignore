@@ -6,3 +6,5 @@ dist
 cover.out
 test/e2e/artifacts
 docs
+deploy/*.tar
+deploy/*SHA256SUMS.txt

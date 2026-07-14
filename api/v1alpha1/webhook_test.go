@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -9,9 +10,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+func TestPVCSnapshotDisabledSurvivesScopeFreezeSerialization(t *testing.T) {
+	scope := BackupScopeSpec{ResourceIdentity: ResourceIdentity{ClusterRef: "c1"}, Mode: BackupScopeModeNamespace, IncludeNamespaces: []string{"app"}, PVC: PVCSelectionSpec{Enabled: false}}
+	payload, err := json.Marshal(scope)
+	require.NoError(t, err)
+	require.Contains(t, string(payload), `"enabled":false`)
+
+	decoded := BackupScopeSpec{}
+	require.NoError(t, json.Unmarshal(payload, &decoded))
+	require.False(t, decoded.PVC.Enabled)
+}
+
 func TestControllerRuntimeWebhookAdapters(t *testing.T) {
 	repository := &BackupRepository{Spec: BackupRepositorySpec{
-		ResourceIdentity: ResourceIdentity{ClusterRef: "cluster-a", ProjectRef: "_platform"},
+		ResourceIdentity: ResourceIdentity{ClusterRef: "cluster-a"},
 		Type:             RepositoryTypeLocal,
 		Local:            &LocalRepositorySpec{Mode: LocalModeHostPath, Path: "/repository", NodeName: "worker-a"},
 	}}
@@ -27,7 +39,7 @@ func TestControllerRuntimeWebhookAdapters(t *testing.T) {
 }
 
 func TestRepositoryValidationRejectsPlainOrUnsafeSFTP(t *testing.T) {
-	repository := &BackupRepository{Spec: BackupRepositorySpec{ResourceIdentity: ResourceIdentity{ClusterRef: "c1", ProjectRef: "_platform"}, Type: RepositoryTypeSFTP, SFTP: &SFTPRepositorySpec{Host: "sftp.example", Port: 22, BasePath: "/backup", Auth: SFTPAuthSpec{Type: "Password", UsernameRef: SecretKeyReference{Namespace: "backup-system", Name: "sftp", Key: "username"}, PasswordRef: &SecretKeyReference{Namespace: "backup-system", Name: "sftp", Key: "password"}}}}}
+	repository := &BackupRepository{Spec: BackupRepositorySpec{ResourceIdentity: ResourceIdentity{ClusterRef: "c1"}, Type: RepositoryTypeSFTP, SFTP: &SFTPRepositorySpec{Host: "sftp.example", Port: 22, BasePath: "/backup", Auth: SFTPAuthSpec{Type: "Password", UsernameRef: SecretKeyReference{Namespace: "backup-system", Name: "sftp", Key: "username"}, PasswordRef: &SecretKeyReference{Namespace: "backup-system", Name: "sftp", Key: "password"}}}}}
 	repository.Default()
 	_, err := repository.ValidateCreate()
 	require.ErrorContains(t, err, "knownHostsRef")
@@ -40,9 +52,9 @@ func TestRepositoryValidationRejectsPlainOrUnsafeSFTP(t *testing.T) {
 }
 
 func TestTaskOneTimeScopeFreeze(t *testing.T) {
-	oldTask := &BackupTask{Spec: BackupTaskSpec{ResourceIdentity: ResourceIdentity{ClusterRef: "c1", ProjectRef: "p1"}, Trigger: BackupTriggerManual, ScopeRef: ObjectReference{Name: "scope"}, RepositoryRef: ObjectReference{Name: "repo"}, Timeout: metav1.Duration{Duration: time.Hour}}, Status: BackupTaskStatus{CommonStatus: CommonStatus{Phase: BackupPhasePending}}}
+	oldTask := &BackupTask{Spec: BackupTaskSpec{ResourceIdentity: ResourceIdentity{ClusterRef: "c1"}, Trigger: BackupTriggerManual, ScopeRef: ObjectReference{Name: "scope"}, RepositoryRef: ObjectReference{Name: "repo"}, Timeout: metav1.Duration{Duration: time.Hour}}, Status: BackupTaskStatus{CommonStatus: CommonStatus{Phase: BackupPhasePending}}}
 	newTask := oldTask.DeepCopy()
-	newTask.Spec.ScopeSnapshot = &BackupScopeSpec{ResourceIdentity: ResourceIdentity{ClusterRef: "c1", ProjectRef: "p1"}, Mode: BackupScopeModeNamespace, IncludeNamespaces: []string{"app"}}
+	newTask.Spec.ScopeSnapshot = &BackupScopeSpec{ResourceIdentity: ResourceIdentity{ClusterRef: "c1"}, Mode: BackupScopeModeNamespace, IncludeNamespaces: []string{"app"}}
 	newTask.Spec.ScopeGeneration = 3
 	_, err := newTask.ValidateUpdate(oldTask)
 	require.NoError(t, err)
@@ -55,7 +67,7 @@ func TestTaskOneTimeScopeFreeze(t *testing.T) {
 }
 
 func TestRestoreHighRiskRequiresConfirmation(t *testing.T) {
-	task := &RestoreTask{Spec: RestoreTaskSpec{ResourceIdentity: ResourceIdentity{ClusterRef: "c1", ProjectRef: "p1"}, BackupRecordRef: ObjectReference{Name: "record"}, TargetClusterRef: "c1", RestorePVC: true, ConflictPolicy: RestoreConflictPolicy{Default: ConflictOverwrite, AllowRecreate: true}}}
+	task := &RestoreTask{Spec: RestoreTaskSpec{ResourceIdentity: ResourceIdentity{ClusterRef: "c1"}, BackupRecordRef: ObjectReference{Name: "record"}, TargetClusterRef: "c1", RestorePVC: true, ConflictPolicy: RestoreConflictPolicy{Default: ConflictOverwrite, AllowRecreate: true}}}
 	task.Default()
 	_, err := task.ValidateCreate()
 	require.ErrorContains(t, err, "highRiskConfirmed")

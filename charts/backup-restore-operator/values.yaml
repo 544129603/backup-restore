@@ -53,6 +53,19 @@ metrics:
     enabled: false
     interval: 30s
 
+# Lightweight CRD management console. Authentication is intentionally not
+# included in v1.0, so expose it only on a trusted local/admin network.
+webui:
+  enabled: false
+  bindAddress: ":8082"
+  service:
+    type: ClusterIP
+    port: 80
+    nodePort: null
+  resources:
+    requests: {cpu: 25m, memory: 32Mi}
+    limits: {cpu: 250m, memory: 128Mi}
+
 pluginConfig:
   create: true
   maxBackupTasks: 3

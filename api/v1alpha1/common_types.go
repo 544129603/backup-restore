@@ -7,8 +7,6 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 const (
 	LabelCluster              = "protection.platform.io/cluster"
-	LabelProject              = "protection.platform.io/project"
-	LabelTenant               = "protection.platform.io/tenant"
 	LabelPolicyUID            = "protection.platform.io/policy-uid"
 	LabelScheduledAt          = "protection.platform.io/scheduled-at"
 	LabelTrigger              = "protection.platform.io/trigger"
@@ -66,9 +64,6 @@ type SecretKeyReference struct {
 type ResourceIdentity struct {
 	// +kubebuilder:validation:MinLength=1
 	ClusterRef string `json:"clusterRef"`
-	// +kubebuilder:default:="_platform"
-	ProjectRef string `json:"projectRef"`
-	TenantRef  string `json:"tenantRef,omitempty"`
 }
 
 type CommonStatus struct {

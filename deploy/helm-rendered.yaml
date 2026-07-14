@@ -7,7 +7,7 @@ metadata:
   namespace: backup-system
   labels:
     app.kubernetes.io/name: backup-restore-operator
-    app.kubernetes.io/instance: br
+    app.kubernetes.io/instance: backup-restore
     app.kubernetes.io/managed-by: Helm
 ---
 # Source: backup-restore-operator/templates/clusterrole.yaml
@@ -207,10 +207,10 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: backup-restore-operator-br
+  name: backup-restore-operator-backup-restore
   labels:
     app.kubernetes.io/name: backup-restore-operator
-    app.kubernetes.io/instance: br
+    app.kubernetes.io/instance: backup-restore
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -229,12 +229,12 @@ metadata:
   namespace: backup-system
   labels:
     app.kubernetes.io/name: backup-restore-operator
-    app.kubernetes.io/instance: br
+    app.kubernetes.io/instance: backup-restore
     app.kubernetes.io/managed-by: Helm
 spec:
   selector:
     app.kubernetes.io/name: backup-restore-operator
-    app.kubernetes.io/instance: br
+    app.kubernetes.io/instance: backup-restore
   ports:
   - {name: metrics, port: 8080, targetPort: metrics}
 ---
@@ -246,14 +246,36 @@ metadata:
   namespace: backup-system
   labels:
     app.kubernetes.io/name: backup-restore-operator
-    app.kubernetes.io/instance: br
+    app.kubernetes.io/instance: backup-restore
     app.kubernetes.io/managed-by: Helm
 spec:
   selector:
     app.kubernetes.io/name: backup-restore-operator
-    app.kubernetes.io/instance: br
+    app.kubernetes.io/instance: backup-restore
   ports:
   - {name: https, port: 443, targetPort: webhook}
+---
+# Source: backup-restore-operator/templates/webui.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup-restore-operator-webui
+  namespace: backup-system
+  labels:
+    app.kubernetes.io/name: backup-restore-operator-webui
+    app.kubernetes.io/instance: backup-restore
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: webui
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: backup-restore-operator-webui
+    app.kubernetes.io/instance: backup-restore
+    app.kubernetes.io/component: webui
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
 ---
 # Source: backup-restore-operator/templates/deployment.yaml
 apiVersion: apps/v1
@@ -263,28 +285,51 @@ metadata:
   namespace: backup-system
   labels:
     app.kubernetes.io/name: backup-restore-operator
-    app.kubernetes.io/instance: br
+    app.kubernetes.io/instance: backup-restore
     app.kubernetes.io/managed-by: Helm
 spec:
   replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: backup-restore-operator
-      app.kubernetes.io/instance: br
+      app.kubernetes.io/instance: backup-restore
   template:
     metadata:
       labels:
         app.kubernetes.io/name: backup-restore-operator
-        app.kubernetes.io/instance: br
+        app.kubernetes.io/instance: backup-restore
         app.kubernetes.io/managed-by: Helm
     spec:
       serviceAccountName: backup-restore-operator
       securityContext:
         runAsNonRoot: true
         seccompProfile: {type: RuntimeDefault}
+      initContainers:
+      - name: initialize-local-repository
+        image: "busybox:1.37.0"
+        imagePullPolicy: IfNotPresent
+        command:
+        - sh
+        - -ec
+        - |
+          current_uid="$(stat -c %u /repository)"
+          current_gid="$(stat -c %g /repository)"
+          if [ "$current_uid" != "65532" ] || [ "$current_gid" != "65532" ]; then
+            chown -R 65532:65532 /repository
+            chmod 0770 /repository
+          fi
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+            add: ["CHOWN", "FOWNER"]
+        volumeMounts:
+        - {name: local-repository, mountPath: /repository}
       containers:
       - name: manager
-        image: "backup-restore-operator:dev"
+        image: "backup-restore-operator:dev-local-7"
         imagePullPolicy: IfNotPresent
         env:
         - name: NODE_NAME
@@ -295,7 +340,7 @@ spec:
             fieldRef: {fieldPath: metadata.name}
         args:
         - --leader-elect=true
-        - --cluster-ref=cluster-a
+        - --cluster-ref=docker-desktop
         - --workspace=/workspace
         - --max-concurrent-backups=3
         - --max-concurrent-restores=1
@@ -321,13 +366,81 @@ spec:
         - {name: workspace, mountPath: /workspace}
         - {name: tmp, mountPath: /tmp}
         - {name: webhook-cert, mountPath: /tmp/k8s-webhook-server/serving-certs, readOnly: true}
+        - {name: local-repository, mountPath: /repository}
       volumes:
       - name: workspace
-        emptyDir:
-          sizeLimit: 20Gi
+        persistentVolumeClaim: {claimName: backup-restore-workspace}
       - {name: tmp, emptyDir: {}}
       - name: webhook-cert
         secret: {secretName: backup-restore-webhook-cert}
+      - name: local-repository
+        hostPath: {path: /var/lib/backup-restore-operator/repository, type: DirectoryOrCreate}
+      nodeSelector:
+        {}
+      tolerations:
+        []
+      affinity:
+        {}
+---
+# Source: backup-restore-operator/templates/webui.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backup-restore-operator-webui
+  namespace: backup-system
+  labels:
+    app.kubernetes.io/name: backup-restore-operator-webui
+    app.kubernetes.io/instance: backup-restore
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: webui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backup-restore-operator-webui
+      app.kubernetes.io/instance: backup-restore
+      app.kubernetes.io/component: webui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: backup-restore-operator-webui
+        app.kubernetes.io/instance: backup-restore
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: webui
+    spec:
+      serviceAccountName: backup-restore-operator
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+      - name: webui
+        image: "backup-restore-operator:dev-local-7"
+        imagePullPolicy: IfNotPresent
+        command: ["/webui"]
+        args:
+        - --bind-address=:8082
+        - --cluster-ref=docker-desktop
+        ports:
+        - {name: http, containerPort: 8082}
+        livenessProbe:
+          httpGet: {path: /api/health, port: http}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet: {path: /api/health, port: http}
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        resources:
+          limits:
+            cpu: 250m
+            memory: 128Mi
+          requests:
+            cpu: 25m
+            memory: 32Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities: {drop: ["ALL"]}
+          readOnlyRootFilesystem: true
       nodeSelector:
         {}
       tolerations:

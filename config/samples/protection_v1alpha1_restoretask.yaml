@@ -5,7 +5,6 @@ metadata:
   name: restore-project-a-to-drill
 spec:
   clusterRef: cluster-a
-  projectRef: project-a
   trigger: Manual
   backupRecordRef: {name: backup-REPLACE_ME}
   targetClusterRef: cluster-a

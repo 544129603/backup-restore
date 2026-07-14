@@ -88,7 +88,6 @@ metadata:
   name: e2e-invalid-repository
 spec:
   clusterRef: $ClusterRef
-  projectRef: _platform
   type: Local
   local: {}
 "@

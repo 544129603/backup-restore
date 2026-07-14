@@ -93,9 +93,6 @@ func validateIdentity(i ResourceIdentity) error {
 	if i.ClusterRef == "" {
 		return fmt.Errorf("spec.clusterRef is required")
 	}
-	if i.ProjectRef == "" {
-		return fmt.Errorf("spec.projectRef is required")
-	}
 	return nil
 }
 
@@ -132,8 +129,8 @@ func (r *BackupRepository) ValidateUpdate(old runtime.Object) (admission.Warning
 	if !ok {
 		return nil, fmt.Errorf("expected BackupRepository")
 	}
-	if r.Spec.ClusterRef != previous.Spec.ClusterRef || r.Spec.ProjectRef != previous.Spec.ProjectRef || r.Spec.Type != previous.Spec.Type {
-		return nil, fmt.Errorf("clusterRef, projectRef and type are immutable")
+	if r.Spec.ClusterRef != previous.Spec.ClusterRef || r.Spec.Type != previous.Spec.Type {
+		return nil, fmt.Errorf("clusterRef and type are immutable")
 	}
 	return nil, r.validate()
 }
@@ -211,8 +208,8 @@ func (s *BackupScope) ValidateUpdate(old runtime.Object) (admission.Warnings, er
 	if !ok {
 		return nil, fmt.Errorf("expected BackupScope")
 	}
-	if s.Spec.ClusterRef != previous.Spec.ClusterRef || s.Spec.ProjectRef != previous.Spec.ProjectRef || s.Spec.Mode != previous.Spec.Mode {
-		return nil, fmt.Errorf("clusterRef, projectRef and mode are immutable")
+	if s.Spec.ClusterRef != previous.Spec.ClusterRef || s.Spec.Mode != previous.Spec.Mode {
+		return nil, fmt.Errorf("clusterRef and mode are immutable")
 	}
 	return nil, s.validate()
 }
@@ -257,8 +254,8 @@ func (p *BackupPolicy) ValidateUpdate(old runtime.Object) (admission.Warnings, e
 	if !ok {
 		return nil, fmt.Errorf("expected BackupPolicy")
 	}
-	if p.Spec.ClusterRef != previous.Spec.ClusterRef || p.Spec.ProjectRef != previous.Spec.ProjectRef {
-		return nil, fmt.Errorf("clusterRef and projectRef are immutable")
+	if p.Spec.ClusterRef != previous.Spec.ClusterRef {
+		return nil, fmt.Errorf("clusterRef is immutable")
 	}
 	return nil, p.validate()
 }

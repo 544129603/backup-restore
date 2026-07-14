@@ -43,6 +43,8 @@ helm upgrade --install backup-restore charts/backup-restore-operator `
 
 Docker Desktop 本地部署使用 [`deploy/docker-desktop-values.yaml`](./deploy/docker-desktop-values.yaml)，本次实际安装、验证对象与清理方法见 [`deploy/DOCKER-DESKTOP.md`](./deploy/DOCKER-DESKTOP.md)。
 
+本地管理员 Web UI 已随 Helm Chart 部署。执行 `.\deploy\start-webui.ps1` 后访问 <http://localhost:8082>；页面使用说明、安全边界和管理 API 见 [`deploy/WEBUI.md`](./deploy/WEBUI.md)。
+
 ## 生产边界
 
 - V1.0 只承诺同集群 CSI 快照恢复，不承诺快照跨集群/跨存储可移植。

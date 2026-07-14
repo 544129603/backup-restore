@@ -13,6 +13,7 @@ generate:
 manifests:
 	$(CONTROLLER_GEN) crd webhook paths="./api/v1alpha1" output:crd:artifacts:config=config/crd/bases output:webhook:artifacts:config=config/webhook
 	$(CONTROLLER_GEN) rbac:roleName=backup-restore-operator paths="./internal/controller" output:rbac:artifacts:config=config/rbac
+	cp config/crd/bases/protection.platform.io_*.yaml charts/backup-restore-operator/crds/
 
 fmt:
 	go fmt ./...
@@ -33,6 +34,7 @@ test-integration:
 
 build: generate manifests
 	go build -o bin/manager.exe ./cmd/manager
+	go build -o bin/webui.exe ./cmd/webui
 
 docker-build:
 	docker build -t $(IMG) .

@@ -4,7 +4,6 @@ metadata:
   name: local-primary
 spec:
   clusterRef: cluster-a
-  projectRef: project-a
   type: Local
   enabled: true
   local:

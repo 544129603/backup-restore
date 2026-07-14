@@ -4,7 +4,6 @@ metadata:
   name: project-a-emergency-20260713
 spec:
   clusterRef: cluster-a
-  projectRef: project-a
   trigger: Manual
   scopeRef: {name: project-a-production}
   repositoryRef: {name: sftp-primary}

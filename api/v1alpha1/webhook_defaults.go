@@ -26,7 +26,6 @@ func defaultRetryPolicy(p *RetryPolicy) {
 
 // +kubebuilder:webhook:path=/mutate-protection-platform-io-v1alpha1-backuprepository,mutating=true,failurePolicy=fail,sideEffects=None,groups=protection.platform.io,resources=backuprepositories,verbs=create;update,versions=v1alpha1,name=mbackuprepository.protection.platform.io,admissionReviewVersions=v1
 func (r *BackupRepository) Default() {
-	r.Spec.ProjectRef = defaultString(r.Spec.ProjectRef, "_platform")
 	r.Spec.HealthCheckInterval = durationOr(r.Spec.HealthCheckInterval, 30*time.Minute)
 	r.Spec.Timeout = durationOr(r.Spec.Timeout, 30*time.Second)
 	if r.Spec.RetryCount == 0 {
@@ -56,7 +55,6 @@ func (r *BackupRepository) Default() {
 
 // +kubebuilder:webhook:path=/mutate-protection-platform-io-v1alpha1-backupscope,mutating=true,failurePolicy=fail,sideEffects=None,groups=protection.platform.io,resources=backupscopes,verbs=create;update,versions=v1alpha1,name=mbackupscope.protection.platform.io,admissionReviewVersions=v1
 func (s *BackupScope) Default() {
-	s.Spec.ProjectRef = defaultString(s.Spec.ProjectRef, "_platform")
 	if s.Spec.PVC.FailurePolicy == "" {
 		s.Spec.PVC.FailurePolicy = "ContinueAndMarkPartial"
 	}
@@ -71,7 +69,6 @@ func (s *BackupScope) Default() {
 
 // +kubebuilder:webhook:path=/mutate-protection-platform-io-v1alpha1-backuppolicy,mutating=true,failurePolicy=fail,sideEffects=None,groups=protection.platform.io,resources=backuppolicies,verbs=create;update,versions=v1alpha1,name=mbackuppolicy.protection.platform.io,admissionReviewVersions=v1
 func (p *BackupPolicy) Default() {
-	p.Spec.ProjectRef = defaultString(p.Spec.ProjectRef, "_platform")
 	if p.Spec.Schedule.Timezone == "" {
 		p.Spec.Schedule.Timezone = "Etc/UTC"
 	}
@@ -100,7 +97,6 @@ func (p *BackupPolicy) Default() {
 
 // +kubebuilder:webhook:path=/mutate-protection-platform-io-v1alpha1-backuptask,mutating=true,failurePolicy=fail,sideEffects=None,groups=protection.platform.io,resources=backuptasks,verbs=create;update,versions=v1alpha1,name=mbackuptask.protection.platform.io,admissionReviewVersions=v1
 func (t *BackupTask) Default() {
-	t.Spec.ProjectRef = defaultString(t.Spec.ProjectRef, "_platform")
 	if t.Spec.Trigger == "" {
 		t.Spec.Trigger = BackupTriggerManual
 	}
@@ -113,7 +109,6 @@ func (t *BackupTask) Default() {
 
 // +kubebuilder:webhook:path=/mutate-protection-platform-io-v1alpha1-restoretask,mutating=true,failurePolicy=fail,sideEffects=None,groups=protection.platform.io,resources=restoretasks,verbs=create;update,versions=v1alpha1,name=mrestoretask.protection.platform.io,admissionReviewVersions=v1
 func (r *RestoreTask) Default() {
-	r.Spec.ProjectRef = defaultString(r.Spec.ProjectRef, "_platform")
 	if r.Spec.Trigger == "" {
 		r.Spec.Trigger = "Manual"
 	}

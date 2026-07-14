@@ -4,7 +4,6 @@ metadata:
   name: project-a-production
 spec:
   clusterRef: cluster-a
-  projectRef: project-a
   mode: Namespace
   includeNamespaces: [backup, project-a-data]
   excludeNamespaces: []

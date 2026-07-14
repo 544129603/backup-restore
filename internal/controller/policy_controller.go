@@ -68,8 +68,8 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 	if err := r.Get(ctx, client.ObjectKey{Name: object.Spec.RepositoryRef.Name}, repository); err != nil {
 		return r.invalid(ctx, object, "RepositoryUnavailable", err)
 	}
-	if scope.Spec.ClusterRef != object.Spec.ClusterRef || repository.Spec.ClusterRef != object.Spec.ClusterRef || scope.Spec.ProjectRef != object.Spec.ProjectRef || repository.Spec.ProjectRef != "_platform" && repository.Spec.ProjectRef != object.Spec.ProjectRef {
-		return r.invalid(ctx, object, "ReferenceBoundaryMismatch", opererrors.New(opererrors.CodePermissionDenied, "scope or repository is outside policy cluster/project boundary", false, nil))
+	if scope.Spec.ClusterRef != object.Spec.ClusterRef || repository.Spec.ClusterRef != object.Spec.ClusterRef {
+		return r.invalid(ctx, object, "ReferenceBoundaryMismatch", opererrors.New(opererrors.CodePermissionDenied, "scope or repository is outside policy cluster boundary", false, nil))
 	}
 	if scope.Spec.IncludeSecrets && !repository.Spec.Encryption.Enabled {
 		return r.invalid(ctx, object, "EncryptionRequired", opererrors.New(opererrors.CodePermissionDenied, "scopes containing Secrets require repository encryption", false, nil))
@@ -120,7 +120,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 			}
 		}
 		when := metav1.NewTime(scheduledAt)
-		task := &protectionv1alpha1.BackupTask{ObjectMeta: metav1.ObjectMeta{Name: scheduler.DeterministicTaskName(object.Name, scheduledAt), Labels: map[string]string{protectionv1alpha1.LabelPolicyUID: string(object.UID), protectionv1alpha1.LabelScheduledAt: strconv.FormatInt(scheduledAt.Unix(), 10), protectionv1alpha1.LabelTrigger: protectionv1alpha1.BackupTriggerSchedule, protectionv1alpha1.LabelCluster: object.Spec.ClusterRef, protectionv1alpha1.LabelProject: object.Spec.ProjectRef}}, Spec: protectionv1alpha1.BackupTaskSpec{ResourceIdentity: object.Spec.ResourceIdentity, Trigger: protectionv1alpha1.BackupTriggerSchedule, PolicyRef: &protectionv1alpha1.ObjectReference{Name: object.Name, UID: string(object.UID)}, ScheduledAt: &when, ScopeRef: object.Spec.ScopeRef, RepositoryRef: object.Spec.RepositoryRef, ScopeSnapshot: scope.Spec.DeepCopy(), ScopeGeneration: scope.Generation, RepositoryGeneration: repository.Generation, Timeout: object.Spec.Timeout, RetryPolicy: object.Spec.RetryPolicy, FailurePolicy: "Continue", AllowPartialRecord: true, IdempotencyKey: scheduler.ScheduledKey(string(object.UID), scheduledAt)}}
+		task := &protectionv1alpha1.BackupTask{ObjectMeta: metav1.ObjectMeta{Name: scheduler.DeterministicTaskName(object.Name, scheduledAt), Labels: map[string]string{protectionv1alpha1.LabelPolicyUID: string(object.UID), protectionv1alpha1.LabelScheduledAt: strconv.FormatInt(scheduledAt.Unix(), 10), protectionv1alpha1.LabelTrigger: protectionv1alpha1.BackupTriggerSchedule, protectionv1alpha1.LabelCluster: object.Spec.ClusterRef}}, Spec: protectionv1alpha1.BackupTaskSpec{ResourceIdentity: object.Spec.ResourceIdentity, Trigger: protectionv1alpha1.BackupTriggerSchedule, PolicyRef: &protectionv1alpha1.ObjectReference{Name: object.Name, UID: string(object.UID)}, ScheduledAt: &when, ScopeRef: object.Spec.ScopeRef, RepositoryRef: object.Spec.RepositoryRef, ScopeSnapshot: scope.Spec.DeepCopy(), ScopeGeneration: scope.Generation, RepositoryGeneration: repository.Generation, Timeout: object.Spec.Timeout, RetryPolicy: object.Spec.RetryPolicy, FailurePolicy: "Continue", AllowPartialRecord: true, IdempotencyKey: scheduler.ScheduledKey(string(object.UID), scheduledAt)}}
 		createErr := r.Create(ctx, task)
 		if createErr != nil && !apierrors.IsAlreadyExists(createErr) {
 			return ctrl.Result{}, createErr

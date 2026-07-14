@@ -3,3 +3,15 @@ The backup and restore Operator is installed in {{ .Release.Namespace }}.
 Admission TLS is managed by cert-manager; wait for Certificate/backup-restore-serving-cert to become Ready.
 {{- end }}
 Create credentials as Kubernetes Secrets. Never place passwords, private keys, or encryption keys in a CR spec.
+{{- if .Values.webui.enabled }}
+
+The CRD management console is enabled.
+{{- if eq .Values.webui.service.type "NodePort" }}
+Open http://localhost:{{ .Values.webui.service.nodePort }} on Docker Desktop.
+{{- else }}
+Run:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "backup-restore.name" . }}-webui 8082:{{ .Values.webui.service.port }}
+Then open http://localhost:8082.
+{{- end }}
+The v1.0 console has no login layer; keep the Service restricted to trusted administrators.
+{{- end }}

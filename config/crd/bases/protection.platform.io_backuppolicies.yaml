@@ -83,9 +83,6 @@ spec:
                 - RunOnce
                 - RunAll
                 type: string
-              projectRef:
-                default: _platform
-                type: string
               repositoryRef:
                 properties:
                   name:
@@ -161,14 +158,11 @@ spec:
                 type: string
               suspend:
                 type: boolean
-              tenantRef:
-                type: string
               timeout:
                 default: 4h
                 type: string
             required:
             - clusterRef
-            - projectRef
             - repositoryRef
             - schedule
             - scopeRef

@@ -138,9 +138,6 @@ spec:
                 required:
                 - name
                 type: object
-              projectRef:
-                default: _platform
-                type: string
               repositoryRef:
                 properties:
                   name:
@@ -216,15 +213,12 @@ spec:
                 required:
                 - name
                 type: object
-              tenantRef:
-                type: string
             required:
             - backupID
             - backupPath
             - checksum
             - clusterRef
             - formatVersion
-            - projectRef
             - repositoryRef
             - source
             - sourceTaskRef

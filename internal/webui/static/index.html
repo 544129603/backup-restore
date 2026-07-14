@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>备份与恢复控制台</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">BR</div>
+        <div><strong>备份与恢复</strong><span>Docker Desktop</span></div>
+      </div>
+      <nav id="navigation" aria-label="主导航">
+        <button class="nav-item active" data-view="overview"><span>◫</span>概览</button>
+        <p class="nav-group">资源管理</p>
+        <button class="nav-item" data-view="repositories"><span>▣</span>备份仓库</button>
+        <button class="nav-item" data-view="scopes"><span>◎</span>备份范围</button>
+        <button class="nav-item" data-view="policies"><span>◷</span>备份策略</button>
+        <button class="nav-item" data-view="backup-tasks"><span>▶</span>备份任务</button>
+        <button class="nav-item" data-view="records"><span>◇</span>备份记录</button>
+        <button class="nav-item" data-view="restore-tasks"><span>↶</span>恢复任务</button>
+        <p class="nav-group">系统</p>
+        <button class="nav-item" data-view="configs"><span>⚙</span>全局配置</button>
+      </nav>
+      <div class="sidebar-footer">
+        <span class="health-dot" id="health-dot"></span>
+        <div><strong id="health-text">正在连接</strong><span id="version-text">—</span></div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">容器平台数据保护</p>
+          <h1 id="page-title">运行概览</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="button guide-button" id="wizard-launch"><span>✦</span> 操作向导</button>
+          <div class="cluster-pill"><span class="health-dot online"></span><span>集群</span><strong id="cluster-ref">—</strong></div>
+        </div>
+      </header>
+
+      <section id="overview-view" class="view-panel">
+        <div id="summary-cards" class="summary-grid skeleton-grid"></div>
+        <div class="overview-grid">
+          <article class="panel">
+            <div class="panel-header"><div><h2>最近任务</h2><p>备份与恢复任务执行状态</p></div><button class="icon-button" data-refresh title="刷新">↻</button></div>
+            <div id="recent-tasks" class="recent-list loading-block">正在加载任务…</div>
+          </article>
+          <article class="panel">
+            <div class="panel-header"><div><h2>资源健康</h2><p>核心对象状态分布</p></div></div>
+            <div id="health-summary" class="health-summary loading-block">正在读取状态…</div>
+          </article>
+        </div>
+      </section>
+
+      <section id="resource-view" class="view-panel hidden">
+        <div class="toolbar">
+          <div class="search-box"><span>⌕</span><input id="search-input" type="search" placeholder="按名称或状态搜索"></div>
+          <div class="toolbar-actions">
+            <span class="updated-at" id="updated-at"></span>
+            <button class="button secondary" id="refresh-button">↻ 刷新</button>
+            <button class="button primary" id="create-button">＋ 新建</button>
+          </div>
+        </div>
+        <div class="panel table-panel">
+          <div class="table-wrap">
+            <table>
+              <thead id="resource-head"></thead>
+              <tbody id="resource-body"></tbody>
+            </table>
+          </div>
+          <div id="empty-state" class="empty-state hidden">
+            <div class="empty-icon">◇</div>
+            <h3>暂无数据</h3>
+            <p id="empty-message">当前还没有对象。</p>
+          </div>
+          <div id="table-loading" class="table-loading hidden"><span class="spinner"></span>正在读取 Kubernetes 对象…</div>
+          <footer class="table-footer"><span id="result-count">0 个对象</span><span>每 15 秒自动刷新</span></footer>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="editor-dialog" class="modal editor-modal">
+    <form method="dialog" class="modal-card" id="editor-form">
+      <header class="modal-header"><div><p class="eyebrow" id="editor-eyebrow">对象配置</p><h2 id="editor-title">新建对象</h2></div><button class="modal-close" value="cancel" aria-label="关闭">×</button></header>
+      <div class="modal-body">
+        <div class="notice"><strong>JSON 配置编辑器</strong><span>仅提交 metadata.name、labels、annotations 和 spec；status 由 Operator 维护。</span></div>
+        <label class="editor-label" for="object-editor">资源定义</label>
+        <textarea id="object-editor" spellcheck="false" aria-label="资源 JSON"></textarea>
+        <p id="editor-error" class="field-error hidden"></p>
+      </div>
+      <footer class="modal-footer"><button class="button secondary" value="cancel">取消</button><button class="button primary" type="submit" value="default" id="save-button">保存</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="detail-dialog" class="modal detail-modal">
+    <div class="modal-card">
+      <header class="modal-header"><div><p class="eyebrow" id="detail-kind">对象详情</p><h2 id="detail-title">—</h2></div><button class="modal-close" data-close-detail aria-label="关闭">×</button></header>
+      <div class="modal-body detail-body">
+        <div id="detail-summary" class="detail-summary"></div>
+        <div class="code-header"><span>完整资源定义</span><button class="text-button" id="copy-json">复制 JSON</button></div>
+        <pre id="detail-json"></pre>
+      </div>
+      <footer class="modal-footer"><button class="button secondary" data-close-detail>关闭</button><button class="button primary" id="detail-edit">编辑配置</button></footer>
+    </div>
+  </dialog>
+
+  <dialog id="delete-dialog" class="modal confirm-modal">
+    <form method="dialog" class="modal-card" id="delete-form">
+      <header class="modal-header danger-header"><div class="danger-mark">!</div><div><p class="eyebrow">高风险操作</p><h2>确认删除对象</h2></div></header>
+      <div class="modal-body">
+        <p>即将删除 <strong id="delete-name"></strong>。该操作可能触发清理仓库数据或快照。</p>
+        <div id="record-delete-options" class="delete-options hidden">
+          <label for="delete-mode">删除范围</label>
+          <select id="delete-mode">
+            <option value="RecordOnly">仅删除 CR 记录</option>
+            <option value="RepositoryData">删除 CR 和仓库数据</option>
+            <option value="RepositoryDataAndSnapshots">删除 CR、仓库数据和 PVC 快照</option>
+          </select>
+        </div>
+        <label class="confirm-check"><input type="checkbox" id="force-delete"> 强制删除受保护对象（仅在确认无引用时使用）</label>
+        <label class="confirm-input">请输入对象名称以确认<input id="delete-confirmation" autocomplete="off"></label>
+        <p id="delete-error" class="field-error hidden"></p>
+      </div>
+      <footer class="modal-footer"><button class="button secondary" value="cancel">取消</button><button class="button danger" type="submit" value="default">确认删除</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="wizard-dialog" class="modal wizard-modal">
+    <div class="modal-card wizard-card">
+      <header class="modal-header wizard-header">
+        <div><p class="eyebrow">Kubernetes 对象管理</p><h2 id="wizard-title">操作向导</h2></div>
+        <button class="modal-close" id="wizard-close" aria-label="关闭">×</button>
+      </header>
+      <div class="wizard-stepper" id="wizard-stepper" aria-label="向导进度"></div>
+      <div class="modal-body wizard-body" id="wizard-content"></div>
+      <footer class="modal-footer wizard-footer">
+        <button class="button secondary" id="wizard-advanced">高级 JSON</button>
+        <span class="wizard-footer-spacer"></span>
+        <button class="button secondary" id="wizard-back">上一步</button>
+        <button class="button primary" id="wizard-next">下一步</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+  <script src="/app.js" defer></script>
+  <script src="/wizard.js" defer></script>
+</body>
+</html>

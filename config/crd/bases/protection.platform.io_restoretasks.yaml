@@ -126,9 +126,6 @@ spec:
                 type: object
               planHash:
                 type: string
-              projectRef:
-                default: _platform
-                type: string
               resourceSelection:
                 properties:
                   exclude:
@@ -150,8 +147,6 @@ spec:
                 type: object
               targetClusterRef:
                 type: string
-              tenantRef:
-                type: string
               timeout:
                 default: 4h
                 type: string
@@ -164,7 +159,6 @@ spec:
             required:
             - backupRecordRef
             - clusterRef
-            - projectRef
             - targetClusterRef
             type: object
           status:

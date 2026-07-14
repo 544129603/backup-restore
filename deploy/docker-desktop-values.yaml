@@ -1,7 +1,7 @@
 # Local Docker Desktop profile. Do not use this file unchanged in production.
 image:
   repository: backup-restore-operator
-  tag: dev-local-1
+  tag: dev-local-7
   pullPolicy: IfNotPresent
 
 replicaCount: 1
@@ -19,7 +19,7 @@ workspace:
   mountPath: /workspace
   emptyDir:
     sizeLimit: 20Gi
-  existingClaim: ""
+  existingClaim: backup-restore-workspace
 
 localRepositoryMount:
   enabled: true
@@ -36,6 +36,17 @@ localRepositoryMount:
 resources:
   requests: {cpu: 100m, memory: 128Mi}
   limits: {cpu: "2", memory: 2Gi}
+
+webui:
+  enabled: true
+  bindAddress: ":8082"
+  service:
+    type: ClusterIP
+    port: 80
+    nodePort: null
+  resources:
+    requests: {cpu: 25m, memory: 32Mi}
+    limits: {cpu: 250m, memory: 128Mi}
 
 pluginConfig:
   create: true

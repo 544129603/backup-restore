@@ -16,7 +16,6 @@ metadata:
   name: sftp-primary
 spec:
   clusterRef: cluster-a
-  projectRef: _platform
   type: SFTP
   enabled: true
   sftp:

@@ -9,3 +9,6 @@
 .vscode/
 *.test
 *.out
+/deploy/*-linux-*.tar
+/deploy/*-multiarch.oci.tar
+/deploy/*-SHA256SUMS.txt

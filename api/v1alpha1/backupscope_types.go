@@ -25,8 +25,9 @@ type ResourceSelection struct {
 }
 
 type PVCSelectionSpec struct {
-	// +kubebuilder:default:=true
-	Enabled              bool                  `json:"enabled,omitempty"`
+	// Enabled is intentionally serialized even when false so a frozen
+	// BackupTask scope cannot be defaulted back to snapshots enabled.
+	Enabled              bool                  `json:"enabled"`
 	Include              []string              `json:"include,omitempty"`
 	Exclude              []string              `json:"exclude,omitempty"`
 	LabelSelector        *metav1.LabelSelector `json:"labelSelector,omitempty"`
@@ -102,7 +103,6 @@ type BackupScopeStatus struct {
 // +kubebuilder:resource:scope=Cluster,shortName=bscope
 // +kubebuilder:printcolumn:name="Mode",type=string,JSONPath=`.spec.mode`
 // +kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=`.spec.clusterRef`
-// +kubebuilder:printcolumn:name="Project",type=string,JSONPath=`.spec.projectRef`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Objects",type=integer,JSONPath=`.status.preview.resourceObjectCount`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`

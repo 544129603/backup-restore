@@ -156,9 +156,6 @@ spec:
                 default: 10Gi
                 pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                 x-kubernetes-int-or-string: true
-              projectRef:
-                default: _platform
-                type: string
               retryCount:
                 default: 3
                 format: int32
@@ -289,8 +286,6 @@ spec:
                 - basePath
                 - host
                 type: object
-              tenantRef:
-                type: string
               timeout:
                 default: 30s
                 type: string
@@ -301,7 +296,6 @@ spec:
                 type: string
             required:
             - clusterRef
-            - projectRef
             - type
             type: object
           status:

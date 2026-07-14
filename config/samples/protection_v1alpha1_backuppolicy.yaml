@@ -4,7 +4,6 @@ metadata:
   name: project-a-nightly
 spec:
   clusterRef: cluster-a
-  projectRef: project-a
   scopeRef: {name: project-a-production}
   repositoryRef: {name: sftp-primary}
   schedule: {cron: "0 2 * * *", timezone: Asia/Shanghai}

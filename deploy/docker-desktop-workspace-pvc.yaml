@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backup-restore-workspace
+  namespace: backup-system
+  labels:
+    app.kubernetes.io/name: backup-restore-operator
+    app.kubernetes.io/component: workspace
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
