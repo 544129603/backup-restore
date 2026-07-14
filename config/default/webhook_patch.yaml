@@ -1,0 +1,41 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: mutating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: backup-system/backup-restore-serving-cert
+webhooks:
+- name: mbackuppluginconfig.protection.platform.io
+  clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
+- name: mbackuppolicy.protection.platform.io
+  clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
+- name: mbackuprepository.protection.platform.io
+  clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
+- name: mbackupscope.protection.platform.io
+  clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
+- name: mbackuptask.protection.platform.io
+  clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
+- name: mrestoretask.protection.platform.io
+  clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: backup-system/backup-restore-serving-cert
+webhooks:
+- name: vbackuppluginconfig.protection.platform.io
+  clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
+- name: vbackuppolicy.protection.platform.io
+  clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
+- name: vbackuprecord.protection.platform.io
+  clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
+- name: vbackuprepository.protection.platform.io
+  clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
+- name: vbackupscope.protection.platform.io
+  clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
+- name: vbackuptask.protection.platform.io
+  clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
+- name: vrestoretask.protection.platform.io
+  clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}

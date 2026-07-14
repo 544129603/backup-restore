@@ -1,0 +1,15 @@
+apiVersion: protection.platform.io/v1alpha1
+kind: BackupTask
+metadata:
+  name: project-a-emergency-20260713
+spec:
+  clusterRef: cluster-a
+  projectRef: project-a
+  trigger: Manual
+  scopeRef: {name: project-a-production}
+  repositoryRef: {name: sftp-primary}
+  timeout: 4h
+  retryPolicy: {maxAttempts: 3, backoff: 30s, maxBackoff: 10m}
+  failurePolicy: Continue
+  allowPartialRecord: true
+  idempotencyKey: project-a/emergency/2026-07-13

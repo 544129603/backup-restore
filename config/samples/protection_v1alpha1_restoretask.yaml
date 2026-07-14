@@ -1,0 +1,29 @@
+# Replace backupRecordRef.name with an Available/PartiallyAvailable record.
+apiVersion: protection.platform.io/v1alpha1
+kind: RestoreTask
+metadata:
+  name: restore-project-a-to-drill
+spec:
+  clusterRef: cluster-a
+  projectRef: project-a
+  trigger: Manual
+  backupRecordRef: {name: backup-REPLACE_ME}
+  targetClusterRef: cluster-a
+  mode: Mapping
+  namespaceMapping:
+    project-a-prod: project-a-drill
+    project-a-data: project-a-data-drill
+  resourceSelection:
+    include: ["*"]
+    includeClusterResources: false
+  restorePVC: true
+  metadataOnly: false
+  storageClassMapping: {fast-csi: fast-csi}
+  conflictPolicy:
+    default: Skip
+    perResource: {configmaps: Overwrite}
+    allowRecreate: false
+    highRiskConfirmed: false
+  dryRun: false
+  failurePolicy: Continue
+  timeout: 4h

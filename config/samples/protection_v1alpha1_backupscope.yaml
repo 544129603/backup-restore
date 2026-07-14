@@ -1,0 +1,25 @@
+apiVersion: protection.platform.io/v1alpha1
+kind: BackupScope
+metadata:
+  name: project-a-production
+spec:
+  clusterRef: cluster-a
+  projectRef: project-a
+  mode: Namespace
+  includeNamespaces: [backup, project-a-data]
+  excludeNamespaces: []
+  resources:
+    include: [deployments.apps, statefulsets.apps, services, configmaps, secrets, persistentvolumeclaims]
+    exclude: [events, pods]
+  labelSelector:
+    matchLabels: {backup.platform.io/enabled: "true"}
+  includeClusterResources: false
+  includeSecrets: true
+  includeCRDs: false
+  includeCustomResources: true
+  pvc:
+    enabled: true
+    snapshotTimeout: 10m
+    failurePolicy: ContinueAndMarkPartial
+    lifecycle: RetainAfterRecordDeletion
+  consistencyMode: CrashConsistent

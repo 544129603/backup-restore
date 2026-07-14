@@ -1,0 +1,273 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: mutating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-protection-platform-io-v1alpha1-backuppluginconfig
+  failurePolicy: Fail
+  name: mbackuppluginconfig.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuppluginconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-protection-platform-io-v1alpha1-backuppolicy
+  failurePolicy: Fail
+  name: mbackuppolicy.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuppolicies
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-protection-platform-io-v1alpha1-backuprepository
+  failurePolicy: Fail
+  name: mbackuprepository.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuprepositories
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-protection-platform-io-v1alpha1-backupscope
+  failurePolicy: Fail
+  name: mbackupscope.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backupscopes
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-protection-platform-io-v1alpha1-backuptask
+  failurePolicy: Fail
+  name: mbackuptask.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuptasks
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-protection-platform-io-v1alpha1-restoretask
+  failurePolicy: Fail
+  name: mrestoretask.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - restoretasks
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-protection-platform-io-v1alpha1-backuppluginconfig
+  failurePolicy: Fail
+  name: vbackuppluginconfig.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuppluginconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-protection-platform-io-v1alpha1-backuppolicy
+  failurePolicy: Fail
+  name: vbackuppolicy.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuppolicies
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-protection-platform-io-v1alpha1-backuprecord
+  failurePolicy: Fail
+  name: vbackuprecord.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - backuprecords
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-protection-platform-io-v1alpha1-backuprepository
+  failurePolicy: Fail
+  name: vbackuprepository.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuprepositories
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-protection-platform-io-v1alpha1-backupscope
+  failurePolicy: Fail
+  name: vbackupscope.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backupscopes
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-protection-platform-io-v1alpha1-backuptask
+  failurePolicy: Fail
+  name: vbackuptask.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - backuptasks
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-protection-platform-io-v1alpha1-restoretask
+  failurePolicy: Fail
+  name: vrestoretask.protection.platform.io
+  rules:
+  - apiGroups:
+    - protection.platform.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - restoretasks
+  sideEffects: None

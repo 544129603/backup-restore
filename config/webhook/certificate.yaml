@@ -1,0 +1,21 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: backup-restore-selfsigned
+  namespace: backup-system
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: backup-restore-serving-cert
+  namespace: backup-system
+spec:
+  dnsNames:
+  - backup-restore-webhook.backup-system.svc
+  - backup-restore-webhook.backup-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: backup-restore-selfsigned
+  secretName: backup-restore-webhook-cert

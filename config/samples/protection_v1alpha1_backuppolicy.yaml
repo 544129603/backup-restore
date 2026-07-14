@@ -1,0 +1,19 @@
+apiVersion: protection.platform.io/v1alpha1
+kind: BackupPolicy
+metadata:
+  name: project-a-nightly
+spec:
+  clusterRef: cluster-a
+  projectRef: project-a
+  scopeRef: {name: project-a-production}
+  repositoryRef: {name: sftp-primary}
+  schedule: {cron: "0 2 * * *", timezone: Asia/Shanghai}
+  enabled: true
+  suspend: false
+  concurrencyPolicy: Forbid
+  missedRunPolicy: RunOnce
+  startingDeadline: 1h
+  maxCatchUpRuns: 1
+  retention: {maxCopies: 7, minCopies: 1, maxAgeDays: 30, deleteSnapshots: false}
+  retryPolicy: {maxAttempts: 3, backoff: 30s, maxBackoff: 10m}
+  timeout: 4h

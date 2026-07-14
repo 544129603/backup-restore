@@ -1,0 +1,40 @@
+# Create this Secret separately; values below are Secret keys, not credentials.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sftp-primary
+  namespace: backup-system
+type: Opaque
+stringData:
+  username: REPLACE_ME
+  password: REPLACE_ME
+  known_hosts: "sftp.example.com ssh-ed25519 REPLACE_ME"
+---
+apiVersion: protection.platform.io/v1alpha1
+kind: BackupRepository
+metadata:
+  name: sftp-primary
+spec:
+  clusterRef: cluster-a
+  projectRef: _platform
+  type: SFTP
+  enabled: true
+  sftp:
+    host: sftp.example.com
+    port: 22
+    basePath: /kubernetes-backups
+    auth:
+      type: Password
+      usernameRef: {namespace: backup-system, name: sftp-primary, key: username}
+      passwordRef: {namespace: backup-system, name: sftp-primary, key: password}
+    knownHostsRef: {namespace: backup-system, name: sftp-primary, key: known_hosts}
+    insecureSkipHostKeyCheck: false
+    connectTimeout: 10s
+    operationTimeout: 5m
+    maxConnections: 4
+  compression: {algorithm: Gzip, level: 6}
+  encryption:
+    enabled: true
+    algorithm: AES256GCM
+    keyRef: {namespace: backup-system, name: backup-encryption-v1, key: key}
+  deletionProtection: true

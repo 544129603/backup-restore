@@ -1,0 +1,20 @@
+apiVersion: protection.platform.io/v1alpha1
+kind: BackupRepository
+metadata:
+  name: local-primary
+spec:
+  clusterRef: cluster-a
+  projectRef: project-a
+  type: Local
+  enabled: true
+  local:
+    mode: HostPath
+    path: /repository
+    nodeName: desktop-control-plane
+    uid: 1000
+    gid: 1000
+  compression: {algorithm: Gzip, level: 6}
+  encryption:
+    enabled: false
+  minimumFreeBytes: 10Gi
+  deletionProtection: true

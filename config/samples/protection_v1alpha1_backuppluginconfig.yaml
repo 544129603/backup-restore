@@ -1,0 +1,24 @@
+apiVersion: protection.platform.io/v1alpha1
+kind: BackupPluginConfig
+metadata:
+  name: cluster
+spec:
+  defaultTimezone: Asia/Shanghai
+  concurrency:
+    maxBackupTasks: 3
+    maxRestoreTasks: 1
+    maxSnapshotsPerTask: 10
+    maxRepositoryOperations: 4
+  kubernetesClient:
+    qps: 20
+    burst: 40
+    pageSize: 500
+  security:
+    allowedSecretNamespaces: [backup-system]
+    requireEncryptionForSecrets: true
+    allowInsecureSFTP: false
+  garbageCollection:
+    interval: 1h
+    stagingGracePeriod: 24h
+    terminalTaskTTLDays: 90
+  workspacePath: /workspace
