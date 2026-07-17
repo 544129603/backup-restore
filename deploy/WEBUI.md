@@ -63,7 +63,7 @@ Web UI 与 Operator 使用同一个镜像中的不同二进制：
 重新构建和升级：
 
 ```powershell
-docker build --build-arg VERSION=dev-local-7 -t backup-restore-operator:dev-local-7 .
+docker build --build-arg VERSION=dev-local-11 -t backup-restore-operator:dev-local-11 .
 
 helm upgrade --install backup-restore charts/backup-restore-operator `
   --namespace backup-system --create-namespace `
@@ -97,4 +97,4 @@ DELETE /api/resources/{resource}/{name}
 POST   /api/resources/{resource}/{name}/actions/{action}
 ```
 
-`resource` 支持 `repositories`、`scopes`、`policies`、`backup-tasks`、`records`、`restore-tasks`、`configs`。集合查询参数 `q`、`phase`、`type` 和 `limit` 均为可选；动作包括仓库/范围刷新、记录校验、策略立即执行、策略启停和任务取消。
+`resource` 支持 `repositories`、`policies`、`backup-tasks`、`records`、`restore-tasks`、`configs`。集合查询参数 `q`、`phase`、`type` 和 `limit` 均为可选；动作包括仓库刷新、恢复点校验、策略立即执行、策略启停和任务取消。`GET /api/policy-runs/{name}` 聚合展示策略关联的执行历史与恢复点。

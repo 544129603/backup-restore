@@ -8,10 +8,10 @@
 |---|---|
 | Kubernetes Context | `docker-desktop` |
 | Kubernetes | v1.36.1，单节点 `desktop-control-plane` Ready |
-| Helm Release | `backup-system/backup-restore`，revision 8 |
-| Operator 镜像 | `backup-restore-operator:dev-local-7` |
+| Helm Release | `backup-system/backup-restore`，revision 1（全新安装） |
+| Operator 镜像 | `backup-restore-operator:dev-local-11` |
 | Operator Pod | 1/1 Ready，启用 Leader Election 和 Admission Webhook |
-| CRD | 7 个，全部 Cluster-scoped、Established |
+| CRD | 6 个，全部 Cluster-scoped、Established；选择范围已合并进 BackupPolicy |
 | clusterRef | `docker-desktop`，六个业务 CRD 均必填 |
 | Local Repo | 节点 `/var/lib/backup-restore-operator/repository` 挂载到容器 `/repository` |
 | 工作目录 | PVC `backup-system/backup-restore-workspace`，20Gi、Bound |
@@ -28,7 +28,7 @@
 kubectl config use-context docker-desktop
 kubectl get nodes
 
-docker build --pull=false --build-arg VERSION=dev-local-7 -t backup-restore-operator:dev-local-7 .
+docker build --pull=false --build-arg VERSION=dev-local-11 -t backup-restore-operator:dev-local-11 .
 
 # Helm upgrade 不会升级 chart crds/，必须显式执行。
 kubectl apply -k config/crd/bases
@@ -67,14 +67,14 @@ helm upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager `
 kubectl get pods,pvc,certificate -n backup-system
 kubectl get crd | Select-String protection.platform.io
 kubectl api-resources --api-group=protection.platform.io
-kubectl get backuppluginconfig,backuprepository,backupscope,backuppolicy,backuptask,backuprecord,restoretask
+kubectl get backuppluginconfig,backuprepository,backuppolicy,backuptask,backuprecord,restoretask
 kubectl logs deployment/backup-restore-operator -n backup-system --tail=200
 ```
 
 API Schema 门禁：
 
-- 六个业务 CRD 的 `spec.clusterRef` 存在且必填。
-- CRD、嵌套的 `BackupTask.spec.scopeSnapshot`、样例和备份包元数据均不包含已删除字段。
+- 五个业务 CRD 的 `spec.clusterRef` 存在且必填。
+- CRD、嵌套的 `BackupTask.spec.selectionSnapshot`、样例和备份包元数据均使用 Policy 内嵌 selection。
 - 旧字段请求由 API Server strict decoding 拒绝。
 - 缺少 `clusterRef` 的请求由 CRD Schema 拒绝。
 
@@ -85,12 +85,11 @@ API Schema 门禁：
 | 类型 | 名称 | 结果 |
 |---|---|---|
 | BackupRepository | `docker-desktop-local` | Ready，Local hostPath，AES-256-GCM |
-| BackupScope | `docker-desktop-e2e-scope` | Ready，1 Namespace、2 类资源、3 个对象，PVC 快照关闭 |
+| BackupPolicy | `docker-desktop-e2e-schedule` | selection 预览为 1 Namespace、2 类资源、3 个对象，成功生成计划任务后已暂停 |
 | BackupTask | `docker-desktop-e2e-backup` | Completed |
 | BackupRecord | `backup-9cf48c54-811a-45f5-85ea-0f49a6eff14a` | Available、Restorable、1,989 bytes |
 | RestoreTask | `docker-desktop-e2e-dryrun` | Completed，4 项计划，未创建资源 |
 | RestoreTask | `docker-desktop-e2e-restore` | Completed，创建 3、跳过 1、失败 0 |
-| BackupPolicy | `docker-desktop-e2e-schedule` | 成功生成计划任务后已暂停 |
 | Scheduled BackupTask | `docker-desktop-e2e-schedule-1783998420` | Completed |
 
 恢复数据核对结果：
@@ -115,7 +114,7 @@ RUN_ENVTEST=1 go test ./test/integration -count=1 -v
 helm lint charts/backup-restore-operator
 helm template ...
 kubectl kustomize config/default
-docker build --build-arg VERSION=dev-local-7 -t backup-restore-operator:dev-local-7 .
+docker build --build-arg VERSION=dev-local-11 -t backup-restore-operator:dev-local-11 .
 ```
 
 EnvTest 使用 Kubernetes 1.32.0 API Server 二进制，RepositoryController 已在真实 EnvTest API Server 中进入 Ready。
@@ -137,7 +136,7 @@ EnvTest 使用 Kubernetes 1.32.0 API Server 二进制，RepositoryController 已
 ```powershell
 helm list -A
 kubectl get pods,pvc -n backup-system
-kubectl get backuprepository,backupscope,backuppolicy,backuptask,backuprecord,restoretask
+kubectl get backuprepository,backuppolicy,backuptask,backuprecord,restoretask
 kubectl logs deployment/backup-restore-operator -n backup-system --tail=200
 ```
 
@@ -165,7 +164,6 @@ foreach ($record in $records) {
   kubectl delete $record
 }
 
-kubectl delete backupscope docker-desktop-e2e-scope
 kubectl annotate backuprepository docker-desktop-local `
   protection.platform.io/force-delete=true --overwrite
 kubectl delete backuprepository docker-desktop-local
