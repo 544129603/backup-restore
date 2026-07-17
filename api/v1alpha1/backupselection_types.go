@@ -5,16 +5,11 @@ package v1alpha1
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-type BackupScopeMode string
+type BackupSelectionMode string
 
 const (
-	BackupScopeModeCluster   BackupScopeMode = "Cluster"
-	BackupScopeModeNamespace BackupScopeMode = "Namespace"
-	ScopePhasePending                        = "Pending"
-	ScopePhaseResolving                      = "Resolving"
-	ScopePhaseReady                          = "Ready"
-	ScopePhaseInvalid                        = "Invalid"
-	ScopePhaseDeleting                       = "Deleting"
+	BackupSelectionModeCluster   BackupSelectionMode = "Cluster"
+	BackupSelectionModeNamespace BackupSelectionMode = "Namespace"
 )
 
 type ResourceSelection struct {
@@ -25,8 +20,8 @@ type ResourceSelection struct {
 }
 
 type PVCSelectionSpec struct {
-	// Enabled is intentionally serialized even when false so a frozen
-	// BackupTask scope cannot be defaulted back to snapshots enabled.
+	// Enabled is intentionally serialized even when false so a frozen task
+	// selection cannot be defaulted back to snapshots enabled.
 	Enabled              bool                  `json:"enabled"`
 	Include              []string              `json:"include,omitempty"`
 	Exclude              []string              `json:"exclude,omitempty"`
@@ -44,7 +39,7 @@ type PVCSelectionSpec struct {
 }
 
 // HookSpec is versioned now so AppConsistent backups can be introduced without
-// changing the scope model. The v1.0 webhook only permits empty hook lists.
+// changing the policy selection model. The v1.0 webhook only permits empty lists.
 type HookSpec struct {
 	Pre  []ResourceHook `json:"pre,omitempty"`
 	Post []ResourceHook `json:"post,omitempty"`
@@ -61,10 +56,11 @@ type ResourceHook struct {
 	OnError string `json:"onError,omitempty"`
 }
 
-type BackupScopeSpec struct {
-	ResourceIdentity `json:",inline"`
+// BackupSelectionSpec defines what a BackupPolicy protects. It is embedded in
+// the policy and copied into each BackupTask to keep running tasks reproducible.
+type BackupSelectionSpec struct {
 	// +kubebuilder:validation:Enum=Cluster;Namespace
-	Mode                    BackupScopeMode       `json:"mode"`
+	Mode                    BackupSelectionMode   `json:"mode"`
 	IncludeNamespaces       []string              `json:"includeNamespaces,omitempty"`
 	ExcludeNamespaces       []string              `json:"excludeNamespaces,omitempty"`
 	Resources               ResourceSelection     `json:"resources,omitempty"`
@@ -80,7 +76,7 @@ type BackupScopeSpec struct {
 	Hooks           HookSpec `json:"hooks,omitempty"`
 }
 
-type ScopePreviewStatus struct {
+type SelectionPreviewStatus struct {
 	NamespaceCount          int64        `json:"namespaceCount,omitempty"`
 	ResourceTypeCount       int64        `json:"resourceTypeCount,omitempty"`
 	ResourceObjectCount     int64        `json:"resourceObjectCount,omitempty"`
@@ -90,32 +86,4 @@ type ScopePreviewStatus struct {
 	RiskCount               int64        `json:"riskCount,omitempty"`
 	GeneratedAt             *metav1.Time `json:"generatedAt,omitempty"`
 	ResolvedHash            string       `json:"resolvedHash,omitempty"`
-}
-
-type BackupScopeStatus struct {
-	CommonStatus         `json:",inline"`
-	Preview              ScopePreviewStatus `json:"preview,omitempty"`
-	ReferencedByPolicies int32              `json:"referencedByPolicies,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster,shortName=bscope
-// +kubebuilder:printcolumn:name="Mode",type=string,JSONPath=`.spec.mode`
-// +kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=`.spec.clusterRef`
-// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
-// +kubebuilder:printcolumn:name="Objects",type=integer,JSONPath=`.status.preview.resourceObjectCount`
-// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-type BackupScope struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              BackupScopeSpec   `json:"spec,omitempty"`
-	Status            BackupScopeStatus `json:"status,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-type BackupScopeList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []BackupScope `json:"items"`
 }

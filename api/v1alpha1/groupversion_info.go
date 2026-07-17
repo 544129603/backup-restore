@@ -25,7 +25,6 @@ func Resource(resource string) schema.GroupResource {
 func init() {
 	SchemeBuilder.Register(
 		&BackupRepository{}, &BackupRepositoryList{},
-		&BackupScope{}, &BackupScopeList{},
 		&BackupPolicy{}, &BackupPolicyList{},
 		&BackupTask{}, &BackupTaskList{},
 		&BackupRecord{}, &BackupRecordList{},

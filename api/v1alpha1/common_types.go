@@ -20,7 +20,6 @@ const (
 	AnnotationDeleteConfirmed = "protection.platform.io/delete-confirmed"
 
 	RepositoryFinalizer = "protection.platform.io/repository-protection"
-	ScopeFinalizer      = "protection.platform.io/scope-protection"
 	PolicyFinalizer     = "protection.platform.io/policy-protection"
 	BackupTaskFinalizer = "protection.platform.io/backup-task-execution"
 	RecordFinalizer     = "protection.platform.io/backup-record-assets"
@@ -31,7 +30,7 @@ const (
 	ConditionReady               = "Ready"
 	ConditionValid               = "Valid"
 	ConditionRepositoryAvailable = "RepositoryAvailable"
-	ConditionScopeResolved       = "ScopeResolved"
+	ConditionSelectionResolved   = "SelectionResolved"
 	ConditionScheduled           = "Scheduled"
 	ConditionResourcesCollected  = "ResourcesCollected"
 	ConditionSnapshotsReady      = "SnapshotsReady"

@@ -10,13 +10,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestPVCSnapshotDisabledSurvivesScopeFreezeSerialization(t *testing.T) {
-	scope := BackupScopeSpec{ResourceIdentity: ResourceIdentity{ClusterRef: "c1"}, Mode: BackupScopeModeNamespace, IncludeNamespaces: []string{"app"}, PVC: PVCSelectionSpec{Enabled: false}}
-	payload, err := json.Marshal(scope)
+func TestPVCSnapshotDisabledSurvivesSelectionFreezeSerialization(t *testing.T) {
+	selection := BackupSelectionSpec{Mode: BackupSelectionModeNamespace, IncludeNamespaces: []string{"app"}, PVC: PVCSelectionSpec{Enabled: false}}
+	payload, err := json.Marshal(selection)
 	require.NoError(t, err)
 	require.Contains(t, string(payload), `"enabled":false`)
 
-	decoded := BackupScopeSpec{}
+	decoded := BackupSelectionSpec{}
 	require.NoError(t, json.Unmarshal(payload, &decoded))
 	require.False(t, decoded.PVC.Enabled)
 }
@@ -51,17 +51,18 @@ func TestRepositoryValidationRejectsPlainOrUnsafeSFTP(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestTaskOneTimeScopeFreeze(t *testing.T) {
-	oldTask := &BackupTask{Spec: BackupTaskSpec{ResourceIdentity: ResourceIdentity{ClusterRef: "c1"}, Trigger: BackupTriggerManual, ScopeRef: ObjectReference{Name: "scope"}, RepositoryRef: ObjectReference{Name: "repo"}, Timeout: metav1.Duration{Duration: time.Hour}}, Status: BackupTaskStatus{CommonStatus: CommonStatus{Phase: BackupPhasePending}}}
+func TestTaskOneTimeSelectionFreeze(t *testing.T) {
+	oldTask := &BackupTask{Spec: BackupTaskSpec{ResourceIdentity: ResourceIdentity{ClusterRef: "c1"}, Trigger: BackupTriggerManual, PolicyRef: ObjectReference{Name: "policy"}, Timeout: metav1.Duration{Duration: time.Hour}}, Status: BackupTaskStatus{CommonStatus: CommonStatus{Phase: BackupPhasePending}}}
 	newTask := oldTask.DeepCopy()
-	newTask.Spec.ScopeSnapshot = &BackupScopeSpec{ResourceIdentity: ResourceIdentity{ClusterRef: "c1"}, Mode: BackupScopeModeNamespace, IncludeNamespaces: []string{"app"}}
-	newTask.Spec.ScopeGeneration = 3
+	newTask.Spec.RepositoryRef = ObjectReference{Name: "repo"}
+	newTask.Spec.SelectionSnapshot = &BackupSelectionSpec{Mode: BackupSelectionModeNamespace, IncludeNamespaces: []string{"app"}}
+	newTask.Spec.PolicyGeneration = 3
 	_, err := newTask.ValidateUpdate(oldTask)
 	require.NoError(t, err)
 	oldTask = newTask.DeepCopy()
 	oldTask.Status.Phase = BackupPhasePreparing
 	newTask = oldTask.DeepCopy()
-	newTask.Spec.ScopeSnapshot.IncludeNamespaces = []string{"other"}
+	newTask.Spec.SelectionSnapshot.IncludeNamespaces = []string{"other"}
 	_, err = newTask.ValidateUpdate(oldTask)
 	require.ErrorContains(t, err, "immutable")
 }

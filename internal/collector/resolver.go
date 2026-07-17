@@ -24,8 +24,8 @@ var defaultExcluded = map[string]struct{}{
 	"tokenreviews.authentication.k8s.io": {}, "subjectaccessreviews.authorization.k8s.io": {},
 	"selfsubjectaccessreviews.authorization.k8s.io": {}, "localsubjectaccessreviews.authorization.k8s.io": {},
 	"bindings": {}, "nodes": {},
-	"backuprepositories.protection.platform.io": {}, "backupscopes.protection.platform.io": {},
-	"backuppolicies.protection.platform.io": {}, "backuptasks.protection.platform.io": {},
+	"backuprepositories.protection.platform.io": {},
+	"backuppolicies.protection.platform.io":     {}, "backuptasks.protection.platform.io": {},
 	"backuprecords.protection.platform.io": {}, "restoretasks.protection.platform.io": {},
 	"backuppluginconfigs.protection.platform.io": {},
 }
@@ -53,7 +53,7 @@ type Preview struct {
 	Warnings                []string
 }
 
-func (r *Resolver) ResolveTypes(_ context.Context, scope *protectionv1alpha1.BackupScope) ([]ResourceType, []string, error) {
+func (r *Resolver) ResolveTypes(_ context.Context, selection protectionv1alpha1.BackupSelectionSpec) ([]ResourceType, []string, error) {
 	lists, err := r.Discovery.ServerPreferredResources()
 	warnings := make([]string, 0)
 	if err != nil {
@@ -75,7 +75,7 @@ func (r *Resolver) ResolveTypes(_ context.Context, scope *protectionv1alpha1.Bac
 				continue
 			}
 			typeInfo := ResourceType{GVR: gv.WithResource(resource.Name), Kind: resource.Kind, Namespaced: resource.Namespaced}
-			if IncludeResource(scope.Spec, typeInfo) {
+			if IncludeResource(selection, typeInfo) {
 				resolved = append(resolved, typeInfo)
 			}
 		}
@@ -86,7 +86,7 @@ func (r *Resolver) ResolveTypes(_ context.Context, scope *protectionv1alpha1.Bac
 	return resolved, warnings, nil
 }
 
-func IncludeResource(spec protectionv1alpha1.BackupScopeSpec, resource ResourceType) bool {
+func IncludeResource(spec protectionv1alpha1.BackupSelectionSpec, resource ResourceType) bool {
 	name := resource.QualifiedName()
 	if _, excluded := defaultExcluded[name]; excluded && !MatchesResource(spec.Resources.Include, name, resource.GVR.Resource) {
 		return false
@@ -126,8 +126,8 @@ func MatchesResource(patterns []string, qualified, resource string) bool {
 	return false
 }
 
-func IncludedNamespaces(spec protectionv1alpha1.BackupScopeSpec) []string {
-	if spec.Mode == protectionv1alpha1.BackupScopeModeCluster {
+func IncludedNamespaces(spec protectionv1alpha1.BackupSelectionSpec) []string {
+	if spec.Mode == protectionv1alpha1.BackupSelectionModeCluster {
 		return []string{metav1.NamespaceAll}
 	}
 	excluded := map[string]struct{}{}
@@ -144,13 +144,13 @@ func IncludedNamespaces(spec protectionv1alpha1.BackupScopeSpec) []string {
 	return result
 }
 
-func NamespaceIncluded(spec protectionv1alpha1.BackupScopeSpec, namespace string) bool {
+func NamespaceIncluded(spec protectionv1alpha1.BackupSelectionSpec, namespace string) bool {
 	for _, excluded := range spec.ExcludeNamespaces {
 		if namespace == excluded {
 			return false
 		}
 	}
-	if spec.Mode == protectionv1alpha1.BackupScopeModeCluster {
+	if spec.Mode == protectionv1alpha1.BackupSelectionModeCluster {
 		return true
 	}
 	for _, included := range spec.IncludeNamespaces {
@@ -161,14 +161,14 @@ func NamespaceIncluded(spec protectionv1alpha1.BackupScopeSpec, namespace string
 	return false
 }
 
-func (r *Resolver) Preview(ctx context.Context, scope *protectionv1alpha1.BackupScope) (*Preview, []ResourceType, error) {
-	types, warnings, err := r.ResolveTypes(ctx, scope)
+func (r *Resolver) Preview(ctx context.Context, selection protectionv1alpha1.BackupSelectionSpec) (*Preview, []ResourceType, error) {
+	types, warnings, err := r.ResolveTypes(ctx, selection)
 	if err != nil {
 		return nil, nil, err
 	}
 	selector := labels.Everything()
-	if scope.Spec.LabelSelector != nil {
-		selector, err = metav1.LabelSelectorAsSelector(scope.Spec.LabelSelector)
+	if selection.LabelSelector != nil {
+		selector, err = metav1.LabelSelectorAsSelector(selection.LabelSelector)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -179,8 +179,8 @@ func (r *Resolver) Preview(ctx context.Context, scope *protectionv1alpha1.Backup
 	}
 	preview := &Preview{ResourceTypeCount: int64(len(types)), Warnings: warnings}
 	seenNamespaces := map[string]struct{}{}
-	namespaces := IncludedNamespaces(scope.Spec)
-	if scope.Spec.Mode == protectionv1alpha1.BackupScopeModeNamespace {
+	namespaces := IncludedNamespaces(selection)
+	if selection.Mode == protectionv1alpha1.BackupSelectionModeNamespace {
 		preview.NamespaceCount = int64(len(namespaces))
 	}
 	for _, resource := range types {
@@ -198,7 +198,7 @@ func (r *Resolver) Preview(ctx context.Context, scope *protectionv1alpha1.Backup
 					break
 				}
 				for i := range list.Items {
-					if resource.Namespaced && !NamespaceIncluded(scope.Spec, list.Items[i].GetNamespace()) {
+					if resource.Namespaced && !NamespaceIncluded(selection, list.Items[i].GetNamespace()) {
 						continue
 					}
 					preview.ResourceObjectCount++
@@ -216,7 +216,7 @@ func (r *Resolver) Preview(ctx context.Context, scope *protectionv1alpha1.Backup
 			}
 		}
 	}
-	if scope.Spec.Mode == protectionv1alpha1.BackupScopeModeCluster {
+	if selection.Mode == protectionv1alpha1.BackupSelectionModeCluster {
 		preview.NamespaceCount = int64(len(seenNamespaces))
 	}
 	return preview, types, nil

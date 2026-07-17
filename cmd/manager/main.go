@@ -86,8 +86,7 @@ func main() {
 
 	reconcilers := []interface{ SetupWithManager(ctrl.Manager) error }{
 		&controller.RepositoryReconciler{Client: manager.GetClient(), Scheme: manager.GetScheme(), Recorder: recorder, ClusterRef: clusterRef},
-		&controller.ScopeReconciler{Client: manager.GetClient(), Scheme: manager.GetScheme(), Resolver: resolver, Snapshots: snapshotManager, ClusterRef: clusterRef},
-		&controller.PolicyReconciler{Client: manager.GetClient(), Scheme: manager.GetScheme(), ClusterRef: clusterRef},
+		&controller.PolicyReconciler{Client: manager.GetClient(), Scheme: manager.GetScheme(), Resolver: resolver, Snapshots: snapshotManager, ClusterRef: clusterRef},
 		&controller.BackupTaskReconciler{Client: manager.GetClient(), Scheme: manager.GetScheme(), Recorder: recorder, Resolver: resolver, Collector: resourceCollector, Snapshots: snapshotManager, Workspace: workspace, Version: version, ClusterRef: clusterRef, MaxConcurrent: maxConcurrentBackups},
 		&controller.BackupRecordReconciler{Client: manager.GetClient(), Scheme: manager.GetScheme(), Snapshots: snapshotManager, ClusterRef: clusterRef},
 		&controller.RestoreTaskReconciler{Client: manager.GetClient(), Scheme: manager.GetScheme(), Dynamic: dynamicClient, Mapper: manager.GetRESTMapper(), Snapshots: snapshotManager, Workspace: workspace, ClusterRef: clusterRef, MaxConcurrent: maxConcurrentRestores},

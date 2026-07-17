@@ -53,22 +53,22 @@ func (r *BackupRepository) Default() {
 	}
 }
 
-// +kubebuilder:webhook:path=/mutate-protection-platform-io-v1alpha1-backupscope,mutating=true,failurePolicy=fail,sideEffects=None,groups=protection.platform.io,resources=backupscopes,verbs=create;update,versions=v1alpha1,name=mbackupscope.protection.platform.io,admissionReviewVersions=v1
-func (s *BackupScope) Default() {
-	if s.Spec.PVC.FailurePolicy == "" {
-		s.Spec.PVC.FailurePolicy = "ContinueAndMarkPartial"
+func defaultSelection(selection *BackupSelectionSpec) {
+	if selection.PVC.FailurePolicy == "" {
+		selection.PVC.FailurePolicy = "ContinueAndMarkPartial"
 	}
-	if s.Spec.PVC.Lifecycle == "" {
-		s.Spec.PVC.Lifecycle = "RetainAfterRecordDeletion"
+	if selection.PVC.Lifecycle == "" {
+		selection.PVC.Lifecycle = "RetainAfterRecordDeletion"
 	}
-	s.Spec.PVC.SnapshotTimeout = durationOr(s.Spec.PVC.SnapshotTimeout, 10*time.Minute)
-	if s.Spec.ConsistencyMode == "" {
-		s.Spec.ConsistencyMode = "CrashConsistent"
+	selection.PVC.SnapshotTimeout = durationOr(selection.PVC.SnapshotTimeout, 10*time.Minute)
+	if selection.ConsistencyMode == "" {
+		selection.ConsistencyMode = "CrashConsistent"
 	}
 }
 
 // +kubebuilder:webhook:path=/mutate-protection-platform-io-v1alpha1-backuppolicy,mutating=true,failurePolicy=fail,sideEffects=None,groups=protection.platform.io,resources=backuppolicies,verbs=create;update,versions=v1alpha1,name=mbackuppolicy.protection.platform.io,admissionReviewVersions=v1
 func (p *BackupPolicy) Default() {
+	defaultSelection(&p.Spec.Selection)
 	if p.Spec.Schedule.Timezone == "" {
 		p.Spec.Schedule.Timezone = "Etc/UTC"
 	}
@@ -105,6 +105,9 @@ func (t *BackupTask) Default() {
 	}
 	t.Spec.Timeout = durationOr(t.Spec.Timeout, 4*time.Hour)
 	defaultRetryPolicy(&t.Spec.RetryPolicy)
+	if t.Spec.SelectionSnapshot != nil {
+		defaultSelection(t.Spec.SelectionSnapshot)
+	}
 }
 
 // +kubebuilder:webhook:path=/mutate-protection-platform-io-v1alpha1-restoretask,mutating=true,failurePolicy=fail,sideEffects=None,groups=protection.platform.io,resources=restoretasks,verbs=create;update,versions=v1alpha1,name=mrestoretask.protection.platform.io,admissionReviewVersions=v1

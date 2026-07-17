@@ -19,7 +19,7 @@ import (
 
 func SetupWebhooksWithManager(mgr ctrl.Manager) error {
 	objects := []runtime.Object{
-		&BackupRepository{}, &BackupScope{}, &BackupPolicy{}, &BackupTask{},
+		&BackupRepository{}, &BackupPolicy{}, &BackupTask{},
 		&BackupRecord{}, &RestoreTask{}, &BackupPluginConfig{},
 	}
 	for _, obj := range objects {
@@ -201,47 +201,31 @@ func (r *BackupRepository) validate() error {
 	return nil
 }
 
-// +kubebuilder:webhook:path=/validate-protection-platform-io-v1alpha1-backupscope,mutating=false,failurePolicy=fail,sideEffects=None,groups=protection.platform.io,resources=backupscopes,verbs=create;update,versions=v1alpha1,name=vbackupscope.protection.platform.io,admissionReviewVersions=v1
-func (s *BackupScope) ValidateCreate() (admission.Warnings, error) { return nil, s.validate() }
-func (s *BackupScope) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
-	previous, ok := old.(*BackupScope)
-	if !ok {
-		return nil, fmt.Errorf("expected BackupScope")
-	}
-	if s.Spec.ClusterRef != previous.Spec.ClusterRef || s.Spec.Mode != previous.Spec.Mode {
-		return nil, fmt.Errorf("clusterRef and mode are immutable")
-	}
-	return nil, s.validate()
-}
-func (s *BackupScope) ValidateDelete() (admission.Warnings, error) { return nil, nil }
-func (s *BackupScope) validate() error {
-	if err := validateIdentity(s.Spec.ResourceIdentity); err != nil {
-		return err
-	}
-	if s.Spec.Mode == BackupScopeModeNamespace && len(s.Spec.IncludeNamespaces) == 0 {
+func validateSelection(selection BackupSelectionSpec) error {
+	if selection.Mode == BackupSelectionModeNamespace && len(selection.IncludeNamespaces) == 0 {
 		return fmt.Errorf("namespace mode requires includeNamespaces")
 	}
-	if s.Spec.Mode == BackupScopeModeCluster && len(s.Spec.IncludeNamespaces) > 0 {
+	if selection.Mode == BackupSelectionModeCluster && len(selection.IncludeNamespaces) > 0 {
 		return fmt.Errorf("cluster mode cannot set includeNamespaces")
 	}
-	if s.Spec.Mode != BackupScopeModeCluster && s.Spec.Mode != BackupScopeModeNamespace {
-		return fmt.Errorf("unsupported scope mode %q", s.Spec.Mode)
+	if selection.Mode != BackupSelectionModeCluster && selection.Mode != BackupSelectionModeNamespace {
+		return fmt.Errorf("unsupported selection mode %q", selection.Mode)
 	}
-	if overlap(s.Spec.IncludeNamespaces, s.Spec.ExcludeNamespaces) {
+	if overlap(selection.IncludeNamespaces, selection.ExcludeNamespaces) {
 		return fmt.Errorf("includeNamespaces and excludeNamespaces overlap")
 	}
-	if overlap(s.Spec.Resources.Include, s.Spec.Resources.Exclude) || overlap(s.Spec.Resources.IncludeCluster, s.Spec.Resources.ExcludeCluster) {
+	if overlap(selection.Resources.Include, selection.Resources.Exclude) || overlap(selection.Resources.IncludeCluster, selection.Resources.ExcludeCluster) {
 		return fmt.Errorf("resource include and exclude rules overlap")
 	}
-	if s.Spec.LabelSelector != nil {
-		if _, err := metav1LabelSelector(s.Spec.LabelSelector); err != nil {
+	if selection.LabelSelector != nil {
+		if _, err := metav1LabelSelector(selection.LabelSelector); err != nil {
 			return fmt.Errorf("invalid labelSelector: %w", err)
 		}
 	}
-	if s.Spec.ConsistencyMode != "" && s.Spec.ConsistencyMode != "CrashConsistent" {
+	if selection.ConsistencyMode != "" && selection.ConsistencyMode != "CrashConsistent" {
 		return fmt.Errorf("only CrashConsistent is supported in v1alpha1 MVP")
 	}
-	if len(s.Spec.Hooks.Pre) > 0 || len(s.Spec.Hooks.Post) > 0 {
+	if len(selection.Hooks.Pre) > 0 || len(selection.Hooks.Post) > 0 {
 		return fmt.Errorf("resource hooks are reserved for v1.1 and must be empty in v1alpha1 MVP")
 	}
 	return nil
@@ -264,8 +248,11 @@ func (p *BackupPolicy) validate() error {
 	if err := validateIdentity(p.Spec.ResourceIdentity); err != nil {
 		return err
 	}
-	if p.Spec.ScopeRef.Name == "" || p.Spec.RepositoryRef.Name == "" {
-		return fmt.Errorf("scopeRef and repositoryRef are required")
+	if p.Spec.RepositoryRef.Name == "" {
+		return fmt.Errorf("repositoryRef is required")
+	}
+	if err := validateSelection(p.Spec.Selection); err != nil {
+		return fmt.Errorf("selection: %w", err)
 	}
 	if len(strings.Fields(p.Spec.Schedule.Cron)) != 5 {
 		return fmt.Errorf("cron must contain exactly five fields")
@@ -292,12 +279,16 @@ func (t *BackupTask) ValidateUpdate(old runtime.Object) (admission.Warnings, err
 	oldSpec, newSpec := previous.Spec, t.Spec
 	oldSpec.CancelRequested, newSpec.CancelRequested = false, false
 	oldSpec.CancelReason, newSpec.CancelReason = "", ""
-	// A manual task may resolve and freeze its scope exactly once before work
+	// A manual task may resolve and freeze its policy selection exactly once before work
 	// starts. Subsequent updates remain immutable.
-	if previous.Spec.ScopeSnapshot == nil && t.Spec.ScopeSnapshot != nil && (previous.Status.Phase == "" || previous.Status.Phase == BackupPhasePending) {
-		oldSpec.ScopeSnapshot = newSpec.ScopeSnapshot
-		oldSpec.ScopeGeneration = newSpec.ScopeGeneration
+	if previous.Spec.SelectionSnapshot == nil && t.Spec.SelectionSnapshot != nil && (previous.Status.Phase == "" || previous.Status.Phase == BackupPhasePending) {
+		oldSpec.PolicyRef = newSpec.PolicyRef
+		oldSpec.RepositoryRef = newSpec.RepositoryRef
+		oldSpec.SelectionSnapshot = newSpec.SelectionSnapshot
+		oldSpec.PolicyGeneration = newSpec.PolicyGeneration
 		oldSpec.RepositoryGeneration = newSpec.RepositoryGeneration
+		oldSpec.Timeout = newSpec.Timeout
+		oldSpec.RetryPolicy = newSpec.RetryPolicy
 	}
 	if !reflect.DeepEqual(oldSpec, newSpec) {
 		return nil, fmt.Errorf("BackupTask spec is immutable except cancelRequested and cancelReason")
@@ -312,8 +303,16 @@ func (t *BackupTask) validate() error {
 	if err := validateIdentity(t.Spec.ResourceIdentity); err != nil {
 		return err
 	}
-	if t.Spec.ScopeRef.Name == "" || t.Spec.RepositoryRef.Name == "" {
-		return fmt.Errorf("scopeRef and repositoryRef are required")
+	if t.Spec.PolicyRef.Name == "" {
+		return fmt.Errorf("policyRef is required")
+	}
+	if t.Spec.SelectionSnapshot != nil {
+		if t.Spec.RepositoryRef.Name == "" {
+			return fmt.Errorf("resolved task requires repositoryRef")
+		}
+		if err := validateSelection(*t.Spec.SelectionSnapshot); err != nil {
+			return fmt.Errorf("selectionSnapshot: %w", err)
+		}
 	}
 	if t.Spec.Trigger == BackupTriggerSchedule && t.Spec.ScheduledAt == nil {
 		return fmt.Errorf("scheduled task requires scheduledAt")
@@ -329,7 +328,7 @@ func (r *BackupRecord) ValidateCreate() (admission.Warnings, error) {
 	if err := validateIdentity(r.Spec.ResourceIdentity); err != nil {
 		return nil, err
 	}
-	if r.Spec.BackupID == "" || r.Spec.SourceTaskRef.Name == "" || r.Spec.RepositoryRef.Name == "" || !safeRelativePath(r.Spec.BackupPath) || r.Spec.Checksum == "" {
+	if r.Spec.BackupID == "" || r.Spec.SourceTaskRef.Name == "" || r.Spec.PolicyRef.Name == "" || r.Spec.RepositoryRef.Name == "" || !safeRelativePath(r.Spec.BackupPath) || r.Spec.Checksum == "" {
 		return nil, fmt.Errorf("backupID, references, safe backupPath and checksum are required")
 	}
 	return nil, nil

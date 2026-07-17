@@ -26,14 +26,14 @@ type Collector struct {
 	PageSize int64
 }
 
-func (c *Collector) Collect(ctx context.Context, scope *protectionv1alpha1.BackupScope, resources []ResourceType, root string) (*Result, error) {
+func (c *Collector) Collect(ctx context.Context, selection protectionv1alpha1.BackupSelectionSpec, resources []ResourceType, root string) (*Result, error) {
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, err
 	}
 	selector := labels.Everything()
 	var err error
-	if scope.Spec.LabelSelector != nil {
-		selector, err = metav1.LabelSelectorAsSelector(scope.Spec.LabelSelector)
+	if selection.LabelSelector != nil {
+		selector, err = metav1.LabelSelectorAsSelector(selection.LabelSelector)
 		if err != nil {
 			return nil, err
 		}
@@ -43,7 +43,7 @@ func (c *Collector) Collect(ctx context.Context, scope *protectionv1alpha1.Backu
 		pageSize = 500
 	}
 	result := &Result{Index: Index{Version: "1.0", CreatedAt: time.Now().UTC(), Entries: []IndexEntry{}}}
-	namespaces := IncludedNamespaces(scope.Spec)
+	namespaces := IncludedNamespaces(selection)
 	for _, resource := range resources {
 		targets := []string{metav1.NamespaceAll}
 		if resource.Namespaced {
@@ -57,7 +57,7 @@ func (c *Collector) Collect(ctx context.Context, scope *protectionv1alpha1.Backu
 					return nil, fmt.Errorf("list %s: %w", resource.QualifiedName(), listErr)
 				}
 				for i := range list.Items {
-					if resource.Namespaced && !NamespaceIncluded(scope.Spec, list.Items[i].GetNamespace()) {
+					if resource.Namespaced && !NamespaceIncluded(selection, list.Items[i].GetNamespace()) {
 						continue
 					}
 					sanitized, sanitizeErr := sanitizer.Sanitize(&list.Items[i])

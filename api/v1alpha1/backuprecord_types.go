@@ -49,7 +49,7 @@ type BackupRecordSpec struct {
 	ResourceIdentity    `json:",inline"`
 	BackupID            string               `json:"backupID"`
 	SourceTaskRef       ObjectReference      `json:"sourceTaskRef"`
-	PolicyRef           *ObjectReference     `json:"policyRef,omitempty"`
+	PolicyRef           ObjectReference      `json:"policyRef"`
 	RepositoryRef       ObjectReference      `json:"repositoryRef"`
 	Source              BackupSource         `json:"source"`
 	BackupPath          string               `json:"backupPath"`

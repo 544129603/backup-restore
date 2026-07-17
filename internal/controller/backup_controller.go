@@ -41,7 +41,7 @@ const backupFormatVersion = "1.0"
 // +kubebuilder:rbac:groups=protection.platform.io,resources=backuptasks,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=protection.platform.io,resources=backuptasks/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=protection.platform.io,resources=backuptasks/finalizers,verbs=update
-// +kubebuilder:rbac:groups=protection.platform.io,resources=backuprepositories;backupscopes;backuppolicies,verbs=get;list;watch
+// +kubebuilder:rbac:groups=protection.platform.io,resources=backuprepositories;backuppolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=protection.platform.io,resources=backuprecords,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims;storageclasses;namespaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=snapshot.storage.k8s.io,resources=volumesnapshots;volumesnapshotcontents;volumesnapshotclasses,verbs=get;list;watch;create;update;patch;delete
@@ -147,6 +147,31 @@ func (r *BackupTaskReconciler) Reconcile(ctx context.Context, request ctrl.Reque
 }
 
 func (r *BackupTaskReconciler) validate(ctx context.Context, task *protectionv1alpha1.BackupTask) (ctrl.Result, error) {
+	if task.Spec.SelectionSnapshot == nil || task.Spec.RepositoryRef.Name == "" {
+		policy := &protectionv1alpha1.BackupPolicy{}
+		if err := r.Get(ctx, client.ObjectKey{Name: task.Spec.PolicyRef.Name}, policy); err != nil {
+			return ctrl.Result{}, opererrors.New(opererrors.CodeSelectionInvalid, "policy does not exist", false, err)
+		}
+		if policy.Spec.ClusterRef != task.Spec.ClusterRef {
+			return ctrl.Result{}, opererrors.New(opererrors.CodePermissionDenied, "task references a policy in another cluster", false, nil)
+		}
+		repository, err := getRepository(ctx, r.Client, policy.Spec.RepositoryRef.Name)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		before := task.DeepCopy()
+		task.Spec.PolicyRef.UID = string(policy.UID)
+		task.Spec.RepositoryRef = policy.Spec.RepositoryRef
+		task.Spec.RepositoryRef.UID = string(repository.UID)
+		task.Spec.SelectionSnapshot = policy.Spec.Selection.DeepCopy()
+		task.Spec.PolicyGeneration = policy.Generation
+		task.Spec.RepositoryGeneration = repository.Generation
+		task.Spec.Timeout = policy.Spec.Timeout
+		task.Spec.RetryPolicy = policy.Spec.RetryPolicy
+		if err = r.Patch(ctx, task, client.MergeFrom(before)); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
 	repository, err := getRepository(ctx, r.Client, task.Spec.RepositoryRef.Name)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -154,25 +179,11 @@ func (r *BackupTaskReconciler) validate(ctx context.Context, task *protectionv1a
 	if repository.Status.Phase != protectionv1alpha1.RepositoryPhaseReady {
 		return ctrl.Result{}, opererrors.New(opererrors.CodeRepoConnect, "repository is not Ready", true, nil)
 	}
-	scope := &protectionv1alpha1.BackupScope{}
-	if err = r.Get(ctx, client.ObjectKey{Name: task.Spec.ScopeRef.Name}, scope); err != nil {
-		return ctrl.Result{}, opererrors.New(opererrors.CodeScopeInvalid, "scope does not exist", false, err)
-	}
-	if scope.Spec.ClusterRef != task.Spec.ClusterRef || repository.Spec.ClusterRef != task.Spec.ClusterRef {
+	if repository.Spec.ClusterRef != task.Spec.ClusterRef {
 		return ctrl.Result{}, opererrors.New(opererrors.CodePermissionDenied, "task references another cluster", false, nil)
 	}
-	if scope.Spec.IncludeSecrets && !repository.Spec.Encryption.Enabled {
-		return ctrl.Result{}, opererrors.New(opererrors.CodePermissionDenied, "scopes containing Secrets require repository encryption", false, nil)
-	}
-	if task.Spec.ScopeSnapshot == nil {
-		before := task.DeepCopy()
-		snapshotSpec := protectionv1alpha1.BackupScopeSpec{}
-		scope.Spec.DeepCopyInto(&snapshotSpec)
-		task.Spec.ScopeSnapshot = &snapshotSpec
-		task.Spec.ScopeGeneration, task.Spec.RepositoryGeneration = scope.Generation, repository.Generation
-		if err = r.Patch(ctx, task, client.MergeFrom(before)); err != nil {
-			return ctrl.Result{}, err
-		}
+	if task.Spec.SelectionSnapshot.IncludeSecrets && !repository.Spec.Encryption.Enabled {
+		return ctrl.Result{}, opererrors.New(opererrors.CodePermissionDenied, "selections containing Secrets require repository encryption", false, nil)
 	}
 	return r.transition(ctx, task, protectionv1alpha1.BackupPhaseValidating, 5, "Validated", "references and permissions validated")
 }
@@ -200,12 +211,11 @@ func (r *BackupTaskReconciler) collect(ctx context.Context, task *protectionv1al
 	if err = os.MkdirAll(payload, 0o700); err != nil {
 		return ctrl.Result{}, err
 	}
-	scope := &protectionv1alpha1.BackupScope{Spec: *task.Spec.ScopeSnapshot}
-	resources, _, err := r.Resolver.ResolveTypes(ctx, scope)
+	resources, _, err := r.Resolver.ResolveTypes(ctx, *task.Spec.SelectionSnapshot)
 	if err != nil {
 		return ctrl.Result{}, opererrors.New(opererrors.CodeBackupCollect, "resolve resource types", true, err)
 	}
-	collected, err := r.Collector.Collect(ctx, scope, resources, payload)
+	collected, err := r.Collector.Collect(ctx, *task.Spec.SelectionSnapshot, resources, payload)
 	if err != nil {
 		return ctrl.Result{}, opererrors.New(opererrors.CodeBackupCollect, "collect resources", true, err)
 	}
@@ -228,7 +238,7 @@ func (r *BackupTaskReconciler) preHooks(ctx context.Context, task *protectionv1a
 }
 
 func (r *BackupTaskReconciler) createSnapshots(ctx context.Context, task *protectionv1alpha1.BackupTask) (ctrl.Result, error) {
-	if task.Spec.ScopeSnapshot == nil || !task.Spec.ScopeSnapshot.PVC.Enabled || task.Status.Progress.TotalPVCs == 0 {
+	if task.Spec.SelectionSnapshot == nil || !task.Spec.SelectionSnapshot.PVC.Enabled || task.Status.Progress.TotalPVCs == 0 {
 		return r.transition(ctx, task, protectionv1alpha1.BackupPhaseCreatingSnapshots, 55, "SnapshotsSkipped", "PVC snapshots are disabled or no PVC was selected")
 	}
 	dir, err := taskDirectory(r.Workspace, string(task.UID))
@@ -246,17 +256,17 @@ func (r *BackupTaskReconciler) createSnapshots(ctx context.Context, task *protec
 		if entry.Kind != "PersistentVolumeClaim" {
 			continue
 		}
-		if !pvcNameSelected(task.Spec.ScopeSnapshot.PVC, entry.Namespace, entry.Name) {
+		if !pvcNameSelected(task.Spec.SelectionSnapshot.PVC, entry.Namespace, entry.Name) {
 			continue
 		}
-		capability, detectErr := r.Snapshots.Detect(ctx, entry.Namespace, entry.Name, task.Spec.ScopeSnapshot.PVC.SnapshotClassName, task.Spec.ScopeSnapshot.PVC.SnapshotClassMapping)
+		capability, detectErr := r.Snapshots.Detect(ctx, entry.Namespace, entry.Name, task.Spec.SelectionSnapshot.PVC.SnapshotClassName, task.Spec.SelectionSnapshot.PVC.SnapshotClassMapping)
 		if detectErr != nil {
 			results = append(results, protectionv1alpha1.SnapshotResult{PVCNamespace: entry.Namespace, PVCName: entry.Name, Phase: "Failed", Error: detectErr.Error()})
 			failed++
 			continue
 		}
-		if task.Spec.ScopeSnapshot.PVC.LabelSelector != nil {
-			selector, selectorErr := metav1.LabelSelectorAsSelector(task.Spec.ScopeSnapshot.PVC.LabelSelector)
+		if task.Spec.SelectionSnapshot.PVC.LabelSelector != nil {
+			selector, selectorErr := metav1.LabelSelectorAsSelector(task.Spec.SelectionSnapshot.PVC.LabelSelector)
 			if selectorErr != nil {
 				return ctrl.Result{}, selectorErr
 			}
@@ -287,7 +297,7 @@ func (r *BackupTaskReconciler) createSnapshots(ctx context.Context, task *protec
 	if pending {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
-	if failed > 0 && task.Spec.ScopeSnapshot.PVC.FailurePolicy == "FailFast" {
+	if failed > 0 && task.Spec.SelectionSnapshot.PVC.FailurePolicy == "FailFast" {
 		return ctrl.Result{}, opererrors.New(opererrors.CodeSnapshotCreate, fmt.Sprintf("%d PVC snapshots failed", failed), false, nil)
 	}
 	conditions.True(&task.Status.Conditions, task.Generation, protectionv1alpha1.ConditionSnapshotsReady, "SnapshotsProcessed", fmt.Sprintf("%d ready, %d failed", len(results)-int(failed), failed))
@@ -487,14 +497,10 @@ func (r *BackupTaskReconciler) generateRecord(ctx context.Context, task *protect
 	if apierrors.IsNotFound(err) {
 		now := metav1.Now()
 		expires := metav1.NewTime(now.Add(30 * 24 * time.Hour))
-		var policyRef *protectionv1alpha1.ObjectReference
-		if task.Spec.PolicyRef != nil {
-			copyRef := *task.Spec.PolicyRef
-			policyRef = &copyRef
-			policy := &protectionv1alpha1.BackupPolicy{}
-			if getErr := r.Get(ctx, client.ObjectKey{Name: copyRef.Name}, policy); getErr == nil && policy.Spec.Retention.MaxAgeDays > 0 {
-				expires = metav1.NewTime(now.Add(time.Duration(policy.Spec.Retention.MaxAgeDays) * 24 * time.Hour))
-			}
+		policyRef := task.Spec.PolicyRef
+		policy := &protectionv1alpha1.BackupPolicy{}
+		if getErr := r.Get(ctx, client.ObjectKey{Name: policyRef.Name}, policy); getErr == nil && policy.Spec.Retention.MaxAgeDays > 0 {
+			expires = metav1.NewTime(now.Add(time.Duration(policy.Spec.Retention.MaxAgeDays) * 24 * time.Hour))
 		}
 		content := "Complete"
 		if task.Status.Progress.FailedSnapshots > 0 || task.Status.Progress.FailedResources > 0 {
@@ -509,7 +515,7 @@ func (r *BackupTaskReconciler) generateRecord(ctx context.Context, task *protect
 		if namespaceErr != nil {
 			return ctrl.Result{}, namespaceErr
 		}
-		source := protectionv1alpha1.BackupSource{ClusterRef: task.Spec.ClusterRef, ScopeMode: string(task.Spec.ScopeSnapshot.Mode), Namespaces: namespaces}
+		source := protectionv1alpha1.BackupSource{ClusterRef: task.Spec.ClusterRef, ScopeMode: string(task.Spec.SelectionSnapshot.Mode), Namespaces: namespaces}
 		if serverVersion, versionErr := r.Resolver.Discovery.ServerVersion(); versionErr == nil {
 			source.KubernetesVersion = serverVersion.GitVersion
 		}
@@ -517,10 +523,7 @@ func (r *BackupTaskReconciler) generateRecord(ctx context.Context, task *protect
 		if getErr := r.Get(ctx, client.ObjectKey{Name: "kube-system"}, clusterNamespace); getErr == nil {
 			source.ClusterUID = string(clusterNamespace.UID)
 		}
-		record = &protectionv1alpha1.BackupRecord{ObjectMeta: metav1.ObjectMeta{Name: recordName, Labels: map[string]string{protectionv1alpha1.LabelTaskUID: string(task.UID), protectionv1alpha1.LabelCluster: task.Spec.ClusterRef}}, Spec: protectionv1alpha1.BackupRecordSpec{ResourceIdentity: task.Spec.ResourceIdentity, BackupID: string(task.UID), SourceTaskRef: protectionv1alpha1.ObjectReference{Name: task.Name, UID: string(task.UID)}, PolicyRef: policyRef, RepositoryRef: task.Spec.RepositoryRef, Source: source, BackupPath: backupRemotePath(task), Checksum: task.Status.ArchiveChecksum, ChecksumAlgorithm: "SHA-256", FormatVersion: backupFormatVersion, OperatorVersion: r.Version, Encryption: encryptionSpec, Inventory: protectionv1alpha1.BackupInventory{ResourceCount: task.Status.Progress.SucceededResources, NamespaceCount: int64(len(namespaces)), PVCCount: task.Status.Progress.TotalPVCs, SnapshotCount: task.Status.Progress.SucceededSnapshots, FailedResourceCount: task.Status.Progress.FailedResources, FailedSnapshotCount: task.Status.Progress.FailedSnapshots, BackupBytes: task.Status.BackupBytes}, Snapshots: task.Status.Snapshots, ContentCompleteness: content, SnapshotLifecycle: task.Spec.ScopeSnapshot.PVC.Lifecycle, ExpiresAt: &expires}}
-		if policyRef != nil {
-			record.Labels[protectionv1alpha1.LabelPolicyUID] = policyRef.UID
-		}
+		record = &protectionv1alpha1.BackupRecord{ObjectMeta: metav1.ObjectMeta{Name: recordName, Labels: map[string]string{protectionv1alpha1.LabelTaskUID: string(task.UID), protectionv1alpha1.LabelPolicyUID: policyRef.UID, protectionv1alpha1.LabelCluster: task.Spec.ClusterRef}}, Spec: protectionv1alpha1.BackupRecordSpec{ResourceIdentity: task.Spec.ResourceIdentity, BackupID: string(task.UID), SourceTaskRef: protectionv1alpha1.ObjectReference{Name: task.Name, UID: string(task.UID)}, PolicyRef: policyRef, RepositoryRef: task.Spec.RepositoryRef, Source: source, BackupPath: backupRemotePath(task), Checksum: task.Status.ArchiveChecksum, ChecksumAlgorithm: "SHA-256", FormatVersion: backupFormatVersion, OperatorVersion: r.Version, Encryption: encryptionSpec, Inventory: protectionv1alpha1.BackupInventory{ResourceCount: task.Status.Progress.SucceededResources, NamespaceCount: int64(len(namespaces)), PVCCount: task.Status.Progress.TotalPVCs, SnapshotCount: task.Status.Progress.SucceededSnapshots, FailedResourceCount: task.Status.Progress.FailedResources, FailedSnapshotCount: task.Status.Progress.FailedSnapshots, BackupBytes: task.Status.BackupBytes}, Snapshots: task.Status.Snapshots, ContentCompleteness: content, SnapshotLifecycle: task.Spec.SelectionSnapshot.PVC.Lifecycle, ExpiresAt: &expires}}
 		if err = r.Create(ctx, record); err != nil && !apierrors.IsAlreadyExists(err) {
 			return ctrl.Result{}, err
 		}
@@ -670,11 +673,11 @@ func pvcNameSelected(spec protectionv1alpha1.PVCSelectionSpec, namespace, name s
 }
 
 func (r *BackupTaskReconciler) sourceNamespaces(task *protectionv1alpha1.BackupTask) ([]string, error) {
-	if task.Spec.ScopeSnapshot == nil {
-		return nil, fmt.Errorf("scope snapshot is missing")
+	if task.Spec.SelectionSnapshot == nil {
+		return nil, fmt.Errorf("selection snapshot is missing")
 	}
-	if task.Spec.ScopeSnapshot.Mode == protectionv1alpha1.BackupScopeModeNamespace {
-		return collector.IncludedNamespaces(*task.Spec.ScopeSnapshot), nil
+	if task.Spec.SelectionSnapshot.Mode == protectionv1alpha1.BackupSelectionModeNamespace {
+		return collector.IncludedNamespaces(*task.Spec.SelectionSnapshot), nil
 	}
 	dir, err := taskDirectory(r.Workspace, string(task.UID))
 	if err != nil {

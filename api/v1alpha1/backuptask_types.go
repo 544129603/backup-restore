@@ -31,16 +31,15 @@ type BackupTaskSpec struct {
 	ResourceIdentity `json:",inline"`
 	// +kubebuilder:validation:Enum=Manual;Schedule;Retry;Clone
 	Trigger       string           `json:"trigger"`
-	PolicyRef     *ObjectReference `json:"policyRef,omitempty"`
+	PolicyRef     ObjectReference  `json:"policyRef"`
 	ParentTaskRef *ObjectReference `json:"parentTaskRef,omitempty"`
 	ScheduledAt   *metav1.Time     `json:"scheduledAt,omitempty"`
-	ScopeRef      ObjectReference  `json:"scopeRef"`
-	RepositoryRef ObjectReference  `json:"repositoryRef"`
-	// ScopeSnapshot freezes selection semantics for reproducible execution. The
-	// policy controller populates it; manual tasks may omit it and resolve once.
-	ScopeSnapshot        *BackupScopeSpec `json:"scopeSnapshot,omitempty"`
-	ScopeGeneration      int64            `json:"scopeGeneration,omitempty"`
-	RepositoryGeneration int64            `json:"repositoryGeneration,omitempty"`
+	// RepositoryRef and SelectionSnapshot are resolved from PolicyRef before
+	// execution. Scheduled tasks are born resolved; manual tasks may resolve once.
+	RepositoryRef        ObjectReference      `json:"repositoryRef,omitempty"`
+	SelectionSnapshot    *BackupSelectionSpec `json:"selectionSnapshot,omitempty"`
+	PolicyGeneration     int64                `json:"policyGeneration,omitempty"`
+	RepositoryGeneration int64                `json:"repositoryGeneration,omitempty"`
 	// +kubebuilder:default:="4h"
 	Timeout     metav1.Duration `json:"timeout,omitempty"`
 	RetryPolicy RetryPolicy     `json:"retryPolicy,omitempty"`

@@ -42,11 +42,11 @@ type RetentionSpec struct {
 
 type BackupPolicySpec struct {
 	ResourceIdentity `json:",inline"`
-	ScopeRef         ObjectReference    `json:"scopeRef"`
-	RepositoryRef    ObjectReference    `json:"repositoryRef"`
-	Schedule         BackupScheduleSpec `json:"schedule"`
-	Enabled          bool               `json:"enabled,omitempty"`
-	Suspend          bool               `json:"suspend,omitempty"`
+	Selection        BackupSelectionSpec `json:"selection"`
+	RepositoryRef    ObjectReference     `json:"repositoryRef"`
+	Schedule         BackupScheduleSpec  `json:"schedule"`
+	Enabled          bool                `json:"enabled,omitempty"`
+	Suspend          bool                `json:"suspend,omitempty"`
 	// +kubebuilder:validation:Enum=Allow;Forbid;Replace
 	// +kubebuilder:default:=Forbid
 	ConcurrencyPolicy string `json:"concurrencyPolicy,omitempty"`
@@ -72,15 +72,15 @@ type SkippedRun struct {
 
 type BackupPolicyStatus struct {
 	CommonStatus              `json:",inline"`
-	ResolvedScopeUID          string            `json:"resolvedScopeUID,omitempty"`
-	ResolvedRepositoryUID     string            `json:"resolvedRepositoryUID,omitempty"`
-	LastScheduleTime          *metav1.Time      `json:"lastScheduleTime,omitempty"`
-	LastSuccessfulTime        *metav1.Time      `json:"lastSuccessfulTime,omitempty"`
-	LastEvaluatedScheduleTime *metav1.Time      `json:"lastEvaluatedScheduleTime,omitempty"`
-	NextScheduleTime          *metav1.Time      `json:"nextScheduleTime,omitempty"`
-	ActiveTasks               []ObjectReference `json:"activeTasks,omitempty"`
-	SkippedRuns               []SkippedRun      `json:"skippedRuns,omitempty"`
-	ConsecutiveFailures       int32             `json:"consecutiveFailures,omitempty"`
+	ResolvedRepositoryUID     string                 `json:"resolvedRepositoryUID,omitempty"`
+	SelectionPreview          SelectionPreviewStatus `json:"selectionPreview,omitempty"`
+	LastScheduleTime          *metav1.Time           `json:"lastScheduleTime,omitempty"`
+	LastSuccessfulTime        *metav1.Time           `json:"lastSuccessfulTime,omitempty"`
+	LastEvaluatedScheduleTime *metav1.Time           `json:"lastEvaluatedScheduleTime,omitempty"`
+	NextScheduleTime          *metav1.Time           `json:"nextScheduleTime,omitempty"`
+	ActiveTasks               []ObjectReference      `json:"activeTasks,omitempty"`
+	SkippedRuns               []SkippedRun           `json:"skippedRuns,omitempty"`
+	ConsecutiveFailures       int32                  `json:"consecutiveFailures,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -88,6 +88,7 @@ type BackupPolicyStatus struct {
 // +kubebuilder:resource:scope=Cluster,shortName=bpolicy
 // +kubebuilder:printcolumn:name="Schedule",type=string,JSONPath=`.spec.schedule.cron`
 // +kubebuilder:printcolumn:name="Timezone",type=string,JSONPath=`.spec.schedule.timezone`
+// +kubebuilder:printcolumn:name="Mode",type=string,JSONPath=`.spec.selection.mode`
 // +kubebuilder:printcolumn:name="Enabled",type=boolean,JSONPath=`.spec.enabled`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Next",type=date,JSONPath=`.status.nextScheduleTime`
