@@ -11,7 +11,6 @@ $ErrorActionPreference = "Stop"
 $chart = Join-Path $PSScriptRoot "..\..\charts\backup-restore-operator"
 $crds = @(
     "backuprepositories.protection.platform.io",
-    "backupscopes.protection.platform.io",
     "backuppolicies.protection.platform.io",
     "backuptasks.protection.platform.io",
     "backuprecords.protection.platform.io",
@@ -100,7 +99,7 @@ spec:
     }
 
     Invoke-Native {
-        kubectl get backuppluginconfig,backuprepository,backupscope,backuppolicy,backuptask,backuprecord,restoretask | Out-Host
+        kubectl get backuppluginconfig,backuprepository,backuppolicy,backuptask,backuprecord,restoretask | Out-Host
     } "Cluster-scoped API smoke query"
 
     Write-Host "E2E smoke test passed."

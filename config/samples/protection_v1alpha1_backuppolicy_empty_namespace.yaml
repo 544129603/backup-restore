@@ -1,0 +1,23 @@
+# The Namespace object itself is always archived even when it has no child objects.
+apiVersion: protection.platform.io/v1alpha1
+kind: BackupPolicy
+metadata:
+  name: empty-namespace
+spec:
+  clusterRef: cluster-a
+  repositoryRef: {name: local-primary}
+  selection:
+    mode: Namespace
+    includeNamespaces: [empty-app]
+    resources:
+      include: [secrets]
+    includeClusterResources: false
+    includeSecrets: false
+    includeCRDs: false
+    includeCustomResources: false
+    pvc:
+      enabled: false
+    consistencyMode: CrashConsistent
+  schedule: {cron: "0 2 * * *", timezone: Asia/Shanghai}
+  enabled: false
+  retention: {maxCopies: 7, minCopies: 1, maxAgeDays: 30}

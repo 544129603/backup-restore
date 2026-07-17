@@ -1,0 +1,24 @@
+# Replace backupRecordRef.name with the Available record created from the
+# empty-namespace policy. Apply this task after deleting Namespace empty-app.
+apiVersion: protection.platform.io/v1alpha1
+kind: RestoreTask
+metadata:
+  name: restore-empty-app
+spec:
+  clusterRef: docker-desktop
+  trigger: Manual
+  backupRecordRef:
+    name: backup-REPLACE_ME
+  targetClusterRef: docker-desktop
+  mode: Original
+  resourceSelection:
+    include:
+      - secrets
+    includeClusterResources: false
+  restorePVC: false
+  metadataOnly: false
+  conflictPolicy:
+    default: Skip
+  dryRun: false
+  failurePolicy: Continue
+  timeout: 10m

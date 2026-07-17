@@ -4,8 +4,26 @@ metadata:
   name: project-a-nightly
 spec:
   clusterRef: cluster-a
-  scopeRef: {name: project-a-production}
   repositoryRef: {name: sftp-primary}
+  selection:
+    mode: Namespace
+    includeNamespaces: [backup, project-a-data]
+    excludeNamespaces: []
+    resources:
+      include: [deployments.apps, statefulsets.apps, services, configmaps, secrets, persistentvolumeclaims]
+      exclude: [events, pods]
+    labelSelector:
+      matchLabels: {backup.platform.io/enabled: "true"}
+    includeClusterResources: false
+    includeSecrets: true
+    includeCRDs: false
+    includeCustomResources: true
+    pvc:
+      enabled: true
+      snapshotTimeout: 10m
+      failurePolicy: ContinueAndMarkPartial
+      lifecycle: RetainAfterRecordDeletion
+    consistencyMode: CrashConsistent
   schedule: {cron: "0 2 * * *", timezone: Asia/Shanghai}
   enabled: true
   suspend: false

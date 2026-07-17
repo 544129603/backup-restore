@@ -5,8 +5,7 @@ metadata:
 spec:
   clusterRef: cluster-a
   trigger: Manual
-  scopeRef: {name: project-a-production}
-  repositoryRef: {name: sftp-primary}
+  policyRef: {name: project-a-nightly}
   timeout: 4h
   retryPolicy: {maxAttempts: 3, backoff: 30s, maxBackoff: 10m}
   failurePolicy: Continue
