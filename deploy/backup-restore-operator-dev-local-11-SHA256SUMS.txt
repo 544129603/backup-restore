@@ -1,0 +1,3 @@
+605eae12fe7d804349b1cc6f5f49ab56073e672847eae9c4542313aef6c226c3  backup-restore-operator-dev-local-11-linux-amd64.tar
+b9c91549a67cc9c19eefd60e2aafd6e98688267a39396ab51561d9470978da0d  backup-restore-operator-dev-local-11-linux-arm64.tar
+ce44f0af23b3aec0b653aa37c8c051bf818a4484f885e856391168bbda406c20  backup-restore-operator-dev-local-11-multiarch.oci.tar

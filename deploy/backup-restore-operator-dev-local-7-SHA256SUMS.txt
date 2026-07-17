@@ -1,3 +1,0 @@
-89f35f669699972735edc51d4b93f03813351df176cd79c5ea50026292362b60  backup-restore-operator-dev-local-7-linux-amd64.tar
-4cac352593ebfc76134d62f8dac60f0062d126a0622f41b01c547ca1725741fd  backup-restore-operator-dev-local-7-linux-arm64.tar
-9e181efa98196af1f4215616c1ef6bc515670bd468055cac3bf9751db73bb37d  backup-restore-operator-dev-local-7-multiarch.oci.tar
