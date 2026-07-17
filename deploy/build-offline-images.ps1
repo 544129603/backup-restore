@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "dev-local-11",
+    [string]$Version = "dev-local-12",
     [string]$Repository = "backup-restore-operator",
     [string]$Builder = "desktop-linux"
 )

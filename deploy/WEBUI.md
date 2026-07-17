@@ -63,7 +63,7 @@ Web UI 与 Operator 使用同一个镜像中的不同二进制：
 重新构建和升级：
 
 ```powershell
-docker build --build-arg VERSION=dev-local-11 -t backup-restore-operator:dev-local-11 .
+docker build --build-arg VERSION=dev-local-12 -t backup-restore-operator:dev-local-12 .
 
 helm upgrade --install backup-restore charts/backup-restore-operator `
   --namespace backup-system --create-namespace `

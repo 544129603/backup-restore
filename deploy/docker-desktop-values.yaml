@@ -1,7 +1,7 @@
 # Local Docker Desktop profile. Do not use this file unchanged in production.
 image:
   repository: backup-restore-operator
-  tag: dev-local-11
+  tag: dev-local-12
   pullPolicy: IfNotPresent
 
 replicaCount: 1
