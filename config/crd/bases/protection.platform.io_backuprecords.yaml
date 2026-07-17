@@ -219,6 +219,7 @@ spec:
             - checksum
             - clusterRef
             - formatVersion
+            - policyRef
             - repositoryRef
             - source
             - sourceTaskRef

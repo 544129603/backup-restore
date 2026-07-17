@@ -11,8 +11,6 @@ webhooks:
   clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
 - name: mbackuprepository.protection.platform.io
   clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
-- name: mbackupscope.protection.platform.io
-  clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
 - name: mbackuptask.protection.platform.io
   clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
 - name: mrestoretask.protection.platform.io
@@ -32,8 +30,6 @@ webhooks:
 - name: vbackuprecord.protection.platform.io
   clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
 - name: vbackuprepository.protection.platform.io
-  clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
-- name: vbackupscope.protection.platform.io
   clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}
 - name: vbackuptask.protection.platform.io
   clientConfig: {service: {name: backup-restore-webhook, namespace: backup-system}}

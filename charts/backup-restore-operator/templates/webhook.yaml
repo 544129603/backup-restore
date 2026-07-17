@@ -42,7 +42,7 @@ metadata:
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/backup-restore-serving-cert
   {{- end }}
 webhooks:
-{{- range $entry := list (dict "kind" "backuprepository" "resource" "backuprepositories") (dict "kind" "backupscope" "resource" "backupscopes") (dict "kind" "backuppolicy" "resource" "backuppolicies") (dict "kind" "backuptask" "resource" "backuptasks") (dict "kind" "restoretask" "resource" "restoretasks") (dict "kind" "backuppluginconfig" "resource" "backuppluginconfigs") }}
+{{- range $entry := list (dict "kind" "backuprepository" "resource" "backuprepositories") (dict "kind" "backuppolicy" "resource" "backuppolicies") (dict "kind" "backuptask" "resource" "backuptasks") (dict "kind" "restoretask" "resource" "restoretasks") (dict "kind" "backuppluginconfig" "resource" "backuppluginconfigs") }}
 - name: m{{ $entry.kind }}.protection.platform.io
   admissionReviewVersions: [v1]
   sideEffects: None
@@ -68,7 +68,7 @@ metadata:
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/backup-restore-serving-cert
   {{- end }}
 webhooks:
-{{- range $entry := list (dict "kind" "backuprepository" "resource" "backuprepositories") (dict "kind" "backupscope" "resource" "backupscopes") (dict "kind" "backuppolicy" "resource" "backuppolicies") (dict "kind" "backuptask" "resource" "backuptasks") (dict "kind" "backuprecord" "resource" "backuprecords") (dict "kind" "restoretask" "resource" "restoretasks") (dict "kind" "backuppluginconfig" "resource" "backuppluginconfigs") }}
+{{- range $entry := list (dict "kind" "backuprepository" "resource" "backuprepositories") (dict "kind" "backuppolicy" "resource" "backuppolicies") (dict "kind" "backuptask" "resource" "backuptasks") (dict "kind" "backuprecord" "resource" "backuprecords") (dict "kind" "restoretask" "resource" "restoretasks") (dict "kind" "backuppluginconfig" "resource" "backuppluginconfigs") }}
 - name: v{{ $entry.kind }}.protection.platform.io
   admissionReviewVersions: [v1]
   sideEffects: None

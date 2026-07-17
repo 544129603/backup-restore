@@ -115,7 +115,6 @@ rules:
   - backuppolicies
   - backuprecords
   - backuprepositories
-  - backupscopes
   - backuptasks
   - restoretasks
   verbs:
@@ -133,7 +132,6 @@ rules:
   - backuppolicies/status
   - backuprecords/status
   - backuprepositories/status
-  - backupscopes/status
   - backuptasks/status
   - restoretasks/status
   verbs:
@@ -146,7 +144,6 @@ rules:
   - backuppolicies/finalizers
   - backuprecords/finalizers
   - backuprepositories/finalizers
-  - backupscopes/finalizers
   - backuptasks/finalizers
   - restoretasks/finalizers
   verbs:

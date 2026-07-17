@@ -23,6 +23,9 @@ spec:
     - jsonPath: .spec.schedule.timezone
       name: Timezone
       type: string
+    - jsonPath: .spec.selection.mode
+      name: Mode
+      type: string
     - jsonPath: .spec.enabled
       name: Enabled
       type: boolean
@@ -143,15 +146,353 @@ spec:
                 required:
                 - cron
                 type: object
-              scopeRef:
+              selection:
+                description: |-
+                  BackupSelectionSpec defines what a BackupPolicy protects. It is embedded in
+                  the policy and copied into each BackupTask to keep running tasks reproducible.
                 properties:
-                  name:
-                    minLength: 1
+                  consistencyMode:
+                    default: CrashConsistent
+                    enum:
+                    - CrashConsistent
+                    - AppConsistent
+                    - ManualQuiesce
                     type: string
-                  uid:
+                  excludeNamespaces:
+                    items:
+                      type: string
+                    type: array
+                  hooks:
+                    description: |-
+                      HookSpec is versioned now so AppConsistent backups can be introduced without
+                      changing the policy selection model. The v1.0 webhook only permits empty lists.
+                    properties:
+                      post:
+                        items:
+                          properties:
+                            command:
+                              items:
+                                type: string
+                              type: array
+                            container:
+                              type: string
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            onError:
+                              enum:
+                              - Fail
+                              - Continue
+                              type: string
+                            podSelector:
+                              description: |-
+                                A label selector is a label query over a set of resources. The result of matchLabels and
+                                matchExpressions are ANDed. An empty label selector matches all objects. A null
+                                label selector matches no objects.
+                              properties:
+                                matchExpressions:
+                                  description: matchExpressions is a list of label
+                                    selector requirements. The requirements are ANDed.
+                                  items:
+                                    description: |-
+                                      A label selector requirement is a selector that contains values, a key, and an operator that
+                                      relates the key and values.
+                                    properties:
+                                      key:
+                                        description: key is the label key that the
+                                          selector applies to.
+                                        type: string
+                                      operator:
+                                        description: |-
+                                          operator represents a key's relationship to a set of values.
+                                          Valid operators are In, NotIn, Exists and DoesNotExist.
+                                        type: string
+                                      values:
+                                        description: |-
+                                          values is an array of string values. If the operator is In or NotIn,
+                                          the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                          the values array must be empty. This array is replaced during a strategic
+                                          merge patch.
+                                        items:
+                                          type: string
+                                        type: array
+                                        x-kubernetes-list-type: atomic
+                                    required:
+                                    - key
+                                    - operator
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                    map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                    operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                  type: object
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            timeout:
+                              type: string
+                          required:
+                          - command
+                          - name
+                          - namespace
+                          type: object
+                        type: array
+                      pre:
+                        items:
+                          properties:
+                            command:
+                              items:
+                                type: string
+                              type: array
+                            container:
+                              type: string
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            onError:
+                              enum:
+                              - Fail
+                              - Continue
+                              type: string
+                            podSelector:
+                              description: |-
+                                A label selector is a label query over a set of resources. The result of matchLabels and
+                                matchExpressions are ANDed. An empty label selector matches all objects. A null
+                                label selector matches no objects.
+                              properties:
+                                matchExpressions:
+                                  description: matchExpressions is a list of label
+                                    selector requirements. The requirements are ANDed.
+                                  items:
+                                    description: |-
+                                      A label selector requirement is a selector that contains values, a key, and an operator that
+                                      relates the key and values.
+                                    properties:
+                                      key:
+                                        description: key is the label key that the
+                                          selector applies to.
+                                        type: string
+                                      operator:
+                                        description: |-
+                                          operator represents a key's relationship to a set of values.
+                                          Valid operators are In, NotIn, Exists and DoesNotExist.
+                                        type: string
+                                      values:
+                                        description: |-
+                                          values is an array of string values. If the operator is In or NotIn,
+                                          the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                          the values array must be empty. This array is replaced during a strategic
+                                          merge patch.
+                                        items:
+                                          type: string
+                                        type: array
+                                        x-kubernetes-list-type: atomic
+                                    required:
+                                    - key
+                                    - operator
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                    map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                    operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                  type: object
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            timeout:
+                              type: string
+                          required:
+                          - command
+                          - name
+                          - namespace
+                          type: object
+                        type: array
+                    type: object
+                  includeCRDs:
+                    type: boolean
+                  includeClusterResources:
+                    type: boolean
+                  includeCustomResources:
+                    type: boolean
+                  includeNamespaces:
+                    items:
+                      type: string
+                    type: array
+                  includeSecrets:
+                    type: boolean
+                  labelSelector:
+                    description: |-
+                      A label selector is a label query over a set of resources. The result of matchLabels and
+                      matchExpressions are ANDed. An empty label selector matches all objects. A null
+                      label selector matches no objects.
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
+                        items:
+                          description: |-
+                            A label selector requirement is a selector that contains values, a key, and an operator that
+                            relates the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: |-
+                                operator represents a key's relationship to a set of values.
+                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: |-
+                                values is an array of string values. If the operator is In or NotIn,
+                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced during a strategic
+                                merge patch.
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                          map is equivalent to an element of matchExpressions, whose key field is "key", the
+                          operator is "In", and the values array contains only "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  mode:
+                    enum:
+                    - Cluster
+                    - Namespace
                     type: string
+                  pvc:
+                    properties:
+                      enabled:
+                        description: |-
+                          Enabled is intentionally serialized even when false so a frozen task
+                          selection cannot be defaulted back to snapshots enabled.
+                        type: boolean
+                      exclude:
+                        items:
+                          type: string
+                        type: array
+                      failurePolicy:
+                        default: ContinueAndMarkPartial
+                        enum:
+                        - FailFast
+                        - ContinueAndMarkPartial
+                        type: string
+                      include:
+                        items:
+                          type: string
+                        type: array
+                      labelSelector:
+                        description: |-
+                          A label selector is a label query over a set of resources. The result of matchLabels and
+                          matchExpressions are ANDed. An empty label selector matches all objects. A null
+                          label selector matches no objects.
+                        properties:
+                          matchExpressions:
+                            description: matchExpressions is a list of label selector
+                              requirements. The requirements are ANDed.
+                            items:
+                              description: |-
+                                A label selector requirement is a selector that contains values, a key, and an operator that
+                                relates the key and values.
+                              properties:
+                                key:
+                                  description: key is the label key that the selector
+                                    applies to.
+                                  type: string
+                                operator:
+                                  description: |-
+                                    operator represents a key's relationship to a set of values.
+                                    Valid operators are In, NotIn, Exists and DoesNotExist.
+                                  type: string
+                                values:
+                                  description: |-
+                                    values is an array of string values. If the operator is In or NotIn,
+                                    the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                    the values array must be empty. This array is replaced during a strategic
+                                    merge patch.
+                                  items:
+                                    type: string
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                              required:
+                              - key
+                              - operator
+                              type: object
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          matchLabels:
+                            additionalProperties:
+                              type: string
+                            description: |-
+                              matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                              map is equivalent to an element of matchExpressions, whose key field is "key", the
+                              operator is "In", and the values array contains only "value". The requirements are ANDed.
+                            type: object
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      lifecycle:
+                        default: RetainAfterRecordDeletion
+                        enum:
+                        - DeleteWithRecord
+                        - RetainAfterRecordDeletion
+                        type: string
+                      snapshotClassMapping:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      snapshotClassName:
+                        type: string
+                      snapshotTimeout:
+                        default: 10m
+                        type: string
+                    required:
+                    - enabled
+                    type: object
+                  resources:
+                    properties:
+                      exclude:
+                        items:
+                          type: string
+                        type: array
+                      excludeCluster:
+                        items:
+                          type: string
+                        type: array
+                      include:
+                        items:
+                          type: string
+                        type: array
+                      includeCluster:
+                        items:
+                          type: string
+                        type: array
+                    type: object
                 required:
-                - name
+                - mode
                 type: object
               startingDeadline:
                 default: 1h
@@ -165,7 +506,7 @@ spec:
             - clusterRef
             - repositoryRef
             - schedule
-            - scopeRef
+            - selection
             type: object
           status:
             properties:
@@ -271,8 +612,35 @@ spec:
                 type: string
               resolvedRepositoryUID:
                 type: string
-              resolvedScopeUID:
-                type: string
+              selectionPreview:
+                properties:
+                  generatedAt:
+                    format: date-time
+                    type: string
+                  namespaceCount:
+                    format: int64
+                    type: integer
+                  pvcCount:
+                    format: int64
+                    type: integer
+                  resolvedHash:
+                    type: string
+                  resourceObjectCount:
+                    format: int64
+                    type: integer
+                  resourceTypeCount:
+                    format: int64
+                    type: integer
+                  riskCount:
+                    format: int64
+                    type: integer
+                  snapshotCapablePVCCount:
+                    format: int64
+                    type: integer
+                  unsupportedPVCCount:
+                    format: int64
+                    type: integer
+                type: object
               skippedRuns:
                 items:
                   properties:

@@ -5,6 +5,5 @@ resources:
 - protection.platform.io_backuppolicies.yaml
 - protection.platform.io_backuprecords.yaml
 - protection.platform.io_backuprepositories.yaml
-- protection.platform.io_backupscopes.yaml
 - protection.platform.io_backuptasks.yaml
 - protection.platform.io_restoretasks.yaml

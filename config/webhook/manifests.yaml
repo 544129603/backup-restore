@@ -70,26 +70,6 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /mutate-protection-platform-io-v1alpha1-backupscope
-  failurePolicy: Fail
-  name: mbackupscope.protection.platform.io
-  rules:
-  - apiGroups:
-    - protection.platform.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - backupscopes
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: webhook-service
-      namespace: system
       path: /mutate-protection-platform-io-v1alpha1-backuptask
   failurePolicy: Fail
   name: mbackuptask.protection.platform.io
@@ -210,26 +190,6 @@ webhooks:
     - UPDATE
     resources:
     - backuprepositories
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: webhook-service
-      namespace: system
-      path: /validate-protection-platform-io-v1alpha1-backupscope
-  failurePolicy: Fail
-  name: vbackupscope.protection.platform.io
-  rules:
-  - apiGroups:
-    - protection.platform.io
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - backupscopes
   sideEffects: None
 - admissionReviewVersions:
   - v1

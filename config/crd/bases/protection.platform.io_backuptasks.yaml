@@ -86,6 +86,9 @@ spec:
                 required:
                 - name
                 type: object
+              policyGeneration:
+                format: int64
+                type: integer
               policyRef:
                 properties:
                   name:
@@ -100,6 +103,9 @@ spec:
                 format: int64
                 type: integer
               repositoryRef:
+                description: |-
+                  RepositoryRef and SelectionSnapshot are resolved from PolicyRef before
+                  execution. Scheduled tasks are born resolved; manual tasks may resolve once.
                 properties:
                   name:
                     minLength: 1
@@ -131,27 +137,11 @@ spec:
               scheduledAt:
                 format: date-time
                 type: string
-              scopeGeneration:
-                format: int64
-                type: integer
-              scopeRef:
-                properties:
-                  name:
-                    minLength: 1
-                    type: string
-                  uid:
-                    type: string
-                required:
-                - name
-                type: object
-              scopeSnapshot:
+              selectionSnapshot:
                 description: |-
-                  ScopeSnapshot freezes selection semantics for reproducible execution. The
-                  policy controller populates it; manual tasks may omit it and resolve once.
+                  BackupSelectionSpec defines what a BackupPolicy protects. It is embedded in
+                  the policy and copied into each BackupTask to keep running tasks reproducible.
                 properties:
-                  clusterRef:
-                    minLength: 1
-                    type: string
                   consistencyMode:
                     default: CrashConsistent
                     enum:
@@ -166,7 +156,7 @@ spec:
                   hooks:
                     description: |-
                       HookSpec is versioned now so AppConsistent backups can be introduced without
-                      changing the scope model. The v1.0 webhook only permits empty hook lists.
+                      changing the policy selection model. The v1.0 webhook only permits empty lists.
                     properties:
                       post:
                         items:
@@ -389,8 +379,8 @@ spec:
                     properties:
                       enabled:
                         description: |-
-                          Enabled is intentionally serialized even when false so a frozen
-                          BackupTask scope cannot be defaulted back to snapshots enabled.
+                          Enabled is intentionally serialized even when false so a frozen task
+                          selection cannot be defaulted back to snapshots enabled.
                         type: boolean
                       exclude:
                         items:
@@ -493,7 +483,6 @@ spec:
                         type: array
                     type: object
                 required:
-                - clusterRef
                 - mode
                 type: object
               timeout:
@@ -508,8 +497,7 @@ spec:
                 type: string
             required:
             - clusterRef
-            - repositoryRef
-            - scopeRef
+            - policyRef
             - trigger
             type: object
           status:
