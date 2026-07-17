@@ -98,15 +98,35 @@
   </dialog>
 
   <dialog id="detail-dialog" class="modal detail-modal">
-    <div class="modal-card">
-      <header class="modal-header"><div><p class="eyebrow" id="detail-kind">对象详情</p><h2 id="detail-title">—</h2></div><button class="modal-close" data-close-detail aria-label="关闭">×</button></header>
+    <div class="modal-card detail-card">
+      <header class="detail-header">
+        <div class="detail-heading">
+          <div class="detail-kind-row"><span class="detail-kind-icon" id="detail-kind-icon">◇</span><p class="eyebrow" id="detail-kind">对象详情</p><span id="detail-status"></span></div>
+          <h2 id="detail-title">—</h2>
+          <p id="detail-subtitle">查看对象配置、运行状态和关联关系</p>
+        </div>
+        <button class="modal-close" data-close-detail aria-label="关闭">×</button>
+      </header>
+      <nav class="detail-tabs" id="detail-tabs" aria-label="详情页面">
+        <button class="detail-tab active" data-detail-tab="overview">概览</button>
+        <button class="detail-tab" data-detail-tab="relations">关联对象</button>
+        <button class="detail-tab" data-detail-tab="manifest">资源定义</button>
+      </nav>
       <div class="modal-body detail-body">
-        <div id="detail-summary" class="detail-summary"></div>
-        <section id="detail-lineage" class="lineage-panel hidden"></section>
-        <div class="code-header"><span>完整资源定义</span><button class="text-button" id="copy-json">复制 JSON</button></div>
-        <pre id="detail-json"></pre>
+        <section class="detail-pane" data-detail-pane="overview">
+          <div id="detail-message" class="detail-message hidden"></div>
+          <div id="detail-summary" class="detail-summary"></div>
+          <div id="detail-content" class="detail-content"></div>
+        </section>
+        <section class="detail-pane hidden" data-detail-pane="relations">
+          <section id="detail-lineage" class="lineage-panel"></section>
+        </section>
+        <section class="detail-pane hidden" data-detail-pane="manifest">
+          <div class="code-header"><div><strong>完整资源定义</strong><span>包含 spec 与 Operator 实时维护的 status</span></div><button class="text-button" id="copy-json">复制 JSON</button></div>
+          <pre id="detail-json"></pre>
+        </section>
       </div>
-      <footer class="modal-footer"><button class="button secondary" data-close-detail>关闭</button><button class="button primary" id="detail-edit">编辑配置</button></footer>
+      <footer class="modal-footer detail-footer"><span id="detail-updated">—</span><div><button class="button secondary" data-close-detail>关闭</button><button class="button primary" id="detail-edit">编辑配置</button></div></footer>
     </div>
   </dialog>
 
