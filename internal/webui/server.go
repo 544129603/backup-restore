@@ -50,10 +50,6 @@ var resources = map[string]resourceDescriptor{
 		GVR:  schema.GroupVersionResource{Group: protectionv1alpha1.GroupVersion.Group, Version: protectionv1alpha1.GroupVersion.Version, Resource: "backuprepositories"},
 		Kind: "BackupRepository", ListKind: "BackupRepositoryList", ClusterRef: true,
 	},
-	"scopes": {
-		GVR:  schema.GroupVersionResource{Group: protectionv1alpha1.GroupVersion.Group, Version: protectionv1alpha1.GroupVersion.Version, Resource: "backupscopes"},
-		Kind: "BackupScope", ListKind: "BackupScopeList", ClusterRef: true,
-	},
 	"policies": {
 		GVR:  schema.GroupVersionResource{Group: protectionv1alpha1.GroupVersion.Group, Version: protectionv1alpha1.GroupVersion.Version, Resource: "backuppolicies"},
 		Kind: "BackupPolicy", ListKind: "BackupPolicyList", ClusterRef: true,
@@ -110,6 +106,7 @@ func NewServer(client dynamic.Interface, clusterRef, version string, logger *slo
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.handleHealth)
 	mux.HandleFunc("GET /api/overview", s.handleOverview)
+	mux.HandleFunc("GET /api/policy-runs/{name}", s.handlePolicyRuns)
 	mux.HandleFunc(apiPrefix, s.handleResources)
 
 	staticRoot, err := fs.Sub(staticFiles, "static")
@@ -203,6 +200,82 @@ func compactTask(resource string, object *unstructured.Unstructured) map[string]
 	return map[string]any{
 		"resource": resource, "name": object.GetName(), "phase": phase, "step": step,
 		"percent": percent, "createdAt": object.GetCreationTimestamp(),
+	}
+}
+
+func (s *Server) handlePolicyRuns(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_NAME", "策略名称不能为空")
+		return
+	}
+	tasks, err := s.client.Resource(resources["backup-tasks"].GVR).List(r.Context(), metav1.ListOptions{})
+	if err != nil {
+		writeKubernetesError(w, err)
+		return
+	}
+	records, err := s.client.Resource(resources["records"].GVR).List(r.Context(), metav1.ListOptions{})
+	if err != nil {
+		writeKubernetesError(w, err)
+		return
+	}
+	recordByTask := map[string]unstructured.Unstructured{}
+	for _, record := range s.filterCluster(resources["records"], records.Items) {
+		taskName, _, _ := unstructured.NestedString(record.Object, "spec", "sourceTaskRef", "name")
+		if taskName != "" {
+			recordByTask[taskName] = record
+		}
+	}
+	runs := make([]map[string]any, 0)
+	for _, task := range s.filterCluster(resources["backup-tasks"], tasks.Items) {
+		policyName, _, _ := unstructured.NestedString(task.Object, "spec", "policyRef", "name")
+		if policyName != name {
+			continue
+		}
+		run := map[string]any{"task": task.Object, "conclusion": backupConclusion(&task, nil)}
+		if record, ok := recordByTask[task.GetName()]; ok {
+			recordCopy := record
+			run["record"] = record.Object
+			run["conclusion"] = backupConclusion(&task, &recordCopy)
+		}
+		runs = append(runs, run)
+	}
+	sort.Slice(runs, func(i, j int) bool {
+		left, _ := runs[i]["task"].(map[string]any)
+		right, _ := runs[j]["task"].(map[string]any)
+		leftCreatedAt, _, _ := unstructured.NestedString(left, "metadata", "creationTimestamp")
+		rightCreatedAt, _, _ := unstructured.NestedString(right, "metadata", "creationTimestamp")
+		return leftCreatedAt > rightCreatedAt
+	})
+	writeJSON(w, http.StatusOK, map[string]any{"policy": name, "runs": runs})
+}
+
+func backupConclusion(task, record *unstructured.Unstructured) string {
+	taskPhase, _, _ := unstructured.NestedString(task.Object, "status", "phase")
+	if record == nil {
+		switch taskPhase {
+		case protectionv1alpha1.BackupPhaseFailed, protectionv1alpha1.BackupPhaseCancelled:
+			return "未生成恢复点"
+		case protectionv1alpha1.BackupPhaseCompleted, protectionv1alpha1.BackupPhasePartiallyFailed:
+			return "等待生成恢复点"
+		default:
+			return "正在备份"
+		}
+	}
+	recordPhase, _, _ := unstructured.NestedString(record.Object, "status", "phase")
+	switch recordPhase {
+	case protectionv1alpha1.RecordPhaseAvailable:
+		return "可恢复"
+	case protectionv1alpha1.RecordPhasePartiallyAvailable:
+		return "有限恢复"
+	case protectionv1alpha1.RecordPhaseVerifying, protectionv1alpha1.RecordPhasePending:
+		return "恢复点校验中"
+	case protectionv1alpha1.RecordPhaseBroken:
+		return "恢复点已损坏"
+	case protectionv1alpha1.RecordPhaseRepoUnavailable:
+		return "恢复点暂不可访问"
+	default:
+		return recordPhase
 	}
 }
 
@@ -473,7 +546,7 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request, resourceKe
 		object, err = s.setPolicySuspended(r.Context(), descriptor, name, action == "suspend")
 	case (resourceKey == "backup-tasks" || resourceKey == "restore-tasks") && action == "cancel":
 		object, err = s.cancelTask(r.Context(), descriptor, name)
-	case (resourceKey == "repositories" || resourceKey == "scopes" || resourceKey == "records") && (action == "refresh" || action == "verify"):
+	case (resourceKey == "repositories" || resourceKey == "records") && (action == "refresh" || action == "verify"):
 		object, err = s.markForRefresh(r.Context(), descriptor, name)
 	default:
 		writeAPIError(w, http.StatusBadRequest, "ACTION_NOT_SUPPORTED", "当前对象不支持该操作")
@@ -495,21 +568,16 @@ func (s *Server) runPolicyNow(ctx context.Context, name string) (*unstructured.U
 	if !s.allowedCluster(policyDescriptor, policy) {
 		return nil, apierrors.NewNotFound(policyDescriptor.GVR.GroupResource(), name)
 	}
-	scopeName, _, _ := unstructured.NestedString(policy.Object, "spec", "scopeRef", "name")
 	repositoryName, _, _ := unstructured.NestedString(policy.Object, "spec", "repositoryRef", "name")
-	if scopeName == "" || repositoryName == "" {
-		return nil, apierrors.NewBadRequest("策略缺少 scopeRef 或 repositoryRef")
-	}
-	scope, err := s.client.Resource(resources["scopes"].GVR).Get(ctx, scopeName, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
+	if repositoryName == "" {
+		return nil, apierrors.NewBadRequest("策略缺少 repositoryRef")
 	}
 	repository, err := s.client.Resource(resources["repositories"].GVR).Get(ctx, repositoryName, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 	policySpec, _, _ := unstructured.NestedMap(policy.Object, "spec")
-	scopeSpec, _, _ := unstructured.NestedMap(scope.Object, "spec")
+	selection, _, _ := unstructured.NestedMap(policy.Object, "spec", "selection")
 	requestID := randomID()
 	suffix := "-manual-" + strings.ToLower(requestID[:8])
 	policyPrefix := name
@@ -523,8 +591,9 @@ func (s *Server) runPolicyNow(ctx context.Context, name string) (*unstructured.U
 		"metadata": map[string]any{
 			"name": taskName,
 			"labels": map[string]any{
-				protectionv1alpha1.LabelCluster: s.clusterRef,
-				protectionv1alpha1.LabelTrigger: protectionv1alpha1.BackupTriggerManual,
+				protectionv1alpha1.LabelCluster:   s.clusterRef,
+				protectionv1alpha1.LabelTrigger:   protectionv1alpha1.BackupTriggerManual,
+				protectionv1alpha1.LabelPolicyUID: string(policy.GetUID()),
 			},
 			"annotations": map[string]any{annotationUIRequest: requestID},
 		},
@@ -532,10 +601,9 @@ func (s *Server) runPolicyNow(ctx context.Context, name string) (*unstructured.U
 			"clusterRef":           s.clusterRef,
 			"trigger":              protectionv1alpha1.BackupTriggerManual,
 			"policyRef":            map[string]any{"name": policy.GetName(), "uid": string(policy.GetUID())},
-			"scopeRef":             map[string]any{"name": scopeName, "uid": string(scope.GetUID())},
 			"repositoryRef":        map[string]any{"name": repositoryName, "uid": string(repository.GetUID())},
-			"scopeSnapshot":        scopeSpec,
-			"scopeGeneration":      scope.GetGeneration(),
+			"selectionSnapshot":    selection,
+			"policyGeneration":     policy.GetGeneration(),
 			"repositoryGeneration": repository.GetGeneration(),
 			"timeout":              policySpec["timeout"],
 			"retryPolicy":          policySpec["retryPolicy"],

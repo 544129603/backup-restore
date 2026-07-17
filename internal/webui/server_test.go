@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 )
 
@@ -57,8 +58,7 @@ func TestResourceCRUDInjectsClusterAndFiltersOtherClusters(t *testing.T) {
 
 func TestTaskCancelAction(t *testing.T) {
 	task := object("BackupTask", "running", map[string]any{
-		"clusterRef": "docker-desktop", "trigger": "Manual", "scopeRef": map[string]any{"name": "scope"},
-		"repositoryRef": map[string]any{"name": "repo"},
+		"clusterRef": "docker-desktop", "trigger": "Manual", "policyRef": map[string]any{"name": "policy"},
 	})
 	client := newFakeClient(task)
 	server, err := NewServer(client, "docker-desktop", "test", slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -112,10 +112,81 @@ func TestHealthAndEmbeddedUI(t *testing.T) {
 func TestCreateRejectsDifferentCluster(t *testing.T) {
 	server, err := NewServer(newFakeClient(), "docker-desktop", "test", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, err)
-	payload := object("BackupScope", "foreign", map[string]any{"clusterRef": "other", "mode": "Namespace", "pvc": map[string]any{"enabled": false}})
-	response := request(t, server, http.MethodPost, "/api/resources/scopes", payload.Object)
+	payload := object("BackupPolicy", "foreign", map[string]any{"clusterRef": "other", "selection": map[string]any{"mode": "Namespace", "includeNamespaces": []any{"default"}}, "repositoryRef": map[string]any{"name": "repo"}})
+	response := request(t, server, http.MethodPost, "/api/resources/policies", payload.Object)
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), "docker-desktop")
+}
+
+func TestPolicyRunsAggregatesTasksAndRecoveryPoints(t *testing.T) {
+	older := object("BackupTask", "run-old", map[string]any{
+		"clusterRef": "docker-desktop", "policyRef": map[string]any{"name": "daily"},
+	})
+	older.SetCreationTimestamp(metav1.NewTime(time.Date(2026, 7, 15, 8, 0, 0, 0, time.UTC)))
+	older.Object["status"] = map[string]any{"phase": "Completed"}
+	newer := object("BackupTask", "run-new", map[string]any{
+		"clusterRef": "docker-desktop", "policyRef": map[string]any{"name": "daily"},
+	})
+	newer.SetCreationTimestamp(metav1.NewTime(time.Date(2026, 7, 16, 8, 0, 0, 0, time.UTC)))
+	newer.Object["status"] = map[string]any{"phase": "Completed"}
+	record := object("BackupRecord", "point-new", map[string]any{
+		"clusterRef": "docker-desktop", "sourceTaskRef": map[string]any{"name": "run-new"},
+		"policyRef": map[string]any{"name": "daily"},
+	})
+	record.Object["status"] = map[string]any{"phase": "Available"}
+	client := newFakeClient(older, newer, record)
+	server, err := NewServer(client, "docker-desktop", "test", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, err)
+
+	response := request(t, server, http.MethodGet, "/api/policy-runs/daily", nil)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var result struct {
+		Policy string           `json:"policy"`
+		Runs   []map[string]any `json:"runs"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
+	require.Equal(t, "daily", result.Policy)
+	require.Len(t, result.Runs, 2)
+	firstTask, ok := result.Runs[0]["task"].(map[string]any)
+	require.True(t, ok)
+	firstName, _, err := unstructured.NestedString(firstTask, "metadata", "name")
+	require.NoError(t, err)
+	require.Equal(t, "run-new", firstName)
+	require.Contains(t, result.Runs[0], "record")
+	require.Equal(t, "可恢复", result.Runs[0]["conclusion"])
+}
+
+func TestRunPolicyNowFreezesMergedSelection(t *testing.T) {
+	repository := object("BackupRepository", "repo", map[string]any{
+		"clusterRef": "docker-desktop", "type": "Local",
+	})
+	repository.SetUID(types.UID("repo-uid"))
+	repository.SetGeneration(3)
+	policy := object("BackupPolicy", "daily", map[string]any{
+		"clusterRef": "docker-desktop",
+		"selection": map[string]any{
+			"mode": "Namespace", "includeNamespaces": []any{"payments"},
+		},
+		"repositoryRef": map[string]any{"name": "repo"},
+		"timeout":       "2h",
+		"retryPolicy":   map[string]any{"maxAttempts": int64(2)},
+	})
+	policy.SetUID(types.UID("policy-uid"))
+	policy.SetGeneration(7)
+	client := newFakeClient(repository, policy)
+	server, err := NewServer(client, "docker-desktop", "test", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, err)
+
+	response := request(t, server, http.MethodPost, "/api/resources/policies/daily/actions/run", nil)
+	require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
+	task := mustObject(t, response)
+	policyName, _, err := unstructured.NestedString(task.Object, "spec", "policyRef", "name")
+	require.NoError(t, err)
+	require.Equal(t, "daily", policyName)
+	selectionMode, _, err := unstructured.NestedString(task.Object, "spec", "selectionSnapshot", "mode")
+	require.NoError(t, err)
+	require.Equal(t, "Namespace", selectionMode)
+	require.Equal(t, float64(7), task.Object["spec"].(map[string]any)["policyGeneration"])
 }
 
 func newFakeClient(objects ...runtime.Object) *dynamicfake.FakeDynamicClient {

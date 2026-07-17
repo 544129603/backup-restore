@@ -19,10 +19,9 @@ const wizardOperations = [
 
 const wizardResources = [
   {key: "repositories", icon: "▣", title: "备份仓库", description: "Local 或 SFTP 存储位置", create: true, edit: true},
-  {key: "scopes", icon: "◎", title: "备份范围", description: "Namespace、资源与 PVC 选择", create: true, edit: true},
-  {key: "policies", icon: "◷", title: "备份策略", description: "Cron、保留与并发规则", create: true, edit: true},
-  {key: "backup-tasks", icon: "▶", title: "备份任务", description: "手动或定时执行记录", create: true, edit: false},
-  {key: "records", icon: "◇", title: "备份记录", description: "可恢复副本与完整性状态", create: false, edit: false},
+  {key: "policies", icon: "◷", title: "备份策略", description: "保护范围、仓库、调度与保留规则", create: true, edit: true},
+  {key: "backup-tasks", icon: "▶", title: "执行历史", description: "策略触发的单次备份执行", create: true, edit: false},
+  {key: "records", icon: "◇", title: "恢复点", description: "可恢复副本与完整性状态", create: false, edit: false},
   {key: "restore-tasks", icon: "↶", title: "恢复任务", description: "恢复计划、冲突与执行状态", create: true, edit: false},
   {key: "configs", icon: "⚙", title: "全局配置", description: "并发、安全与垃圾回收", create: true, edit: true},
 ];
@@ -75,40 +74,35 @@ const wizardSchemas = {
       field("spec.encryption.keyRef.key", "加密 Secret Key", "text", {required: true, condition: ["spec.encryption.enabled", true]}),
     ]},
   ],
-  scopes: [
-    {title: "基本信息", icon: "1", fields: [
-      field("metadata.name", "对象名称", "text", {required: true, createOnly: true}),
-      field("spec.mode", "范围模式", "select", {required: true, immutable: true, refresh: true, options: [["Namespace", "指定 Namespace"], ["Cluster", "整集群"]]}),
-      field("spec.includeNamespaces", "包含 Namespace", "csv", {required: true, condition: ["spec.mode", "Namespace"], help: "多个值使用英文逗号分隔"}),
-      field("spec.excludeNamespaces", "排除 Namespace", "csv", {help: "多个值使用英文逗号分隔"}),
-      field("spec.labelSelector.matchLabels", "标签选择器", "map", {full: true, help: "每行一个 key=value"}),
-    ]},
-    {title: "资源过滤", icon: "2", fields: [
-      field("spec.resources.include", "包含资源类型", "csv", {full: true, help: "例如 deployments.apps, services, configmaps"}),
-      field("spec.resources.exclude", "排除资源类型", "csv", {full: true}),
-      field("spec.includeClusterResources", "包含集群级资源", "checkbox"),
-      field("spec.includeSecrets", "包含 Secret", "checkbox"),
-      field("spec.includeCRDs", "包含 CRD", "checkbox"),
-      field("spec.includeCustomResources", "包含 Custom Resource", "checkbox"),
-    ]},
-    {title: "PVC 快照", icon: "3", fields: [
-      field("spec.pvc.enabled", "启用 CSI 快照", "checkbox", {refresh: true}),
-      field("spec.pvc.snapshotClassName", "VolumeSnapshotClass", "text", {condition: ["spec.pvc.enabled", true]}),
-      field("spec.pvc.include", "包含 PVC", "csv", {condition: ["spec.pvc.enabled", true]}),
-      field("spec.pvc.exclude", "排除 PVC", "csv", {condition: ["spec.pvc.enabled", true]}),
-      field("spec.pvc.snapshotTimeout", "快照超时", "text", {condition: ["spec.pvc.enabled", true]}),
-      field("spec.pvc.failurePolicy", "失败策略", "select", {condition: ["spec.pvc.enabled", true], options: [["ContinueAndMarkPartial", "继续并标记部分失败"], ["FailFast", "快速失败"]]}),
-    ]},
-  ],
   policies: [
-    {title: "策略引用", icon: "1", fields: [
+    {title: "基本信息与目的地", icon: "1", fields: [
       field("metadata.name", "对象名称", "text", {required: true, createOnly: true}),
-      field("spec.scopeRef.name", "备份范围", "select", {required: true, source: "scopes"}),
       field("spec.repositoryRef.name", "备份仓库", "select", {required: true, source: "repositories"}),
       field("spec.enabled", "启用策略", "checkbox"),
       field("spec.suspend", "暂停调度", "checkbox"),
     ]},
-    {title: "调度规则", icon: "2", fields: [
+    {title: "保护范围", icon: "2", fields: [
+      field("spec.selection.mode", "范围模式", "select", {required: true, refresh: true, options: [["Namespace", "指定 Namespace"], ["Cluster", "整集群"]]}),
+      field("spec.selection.includeNamespaces", "包含 Namespace", "csv", {required: true, condition: ["spec.selection.mode", "Namespace"], help: "多个值使用英文逗号分隔"}),
+      field("spec.selection.excludeNamespaces", "排除 Namespace", "csv", {condition: ["spec.selection.mode", "Namespace"]}),
+      field("spec.selection.labelSelector.matchLabels", "标签选择器", "map", {full: true, help: "每行一个 key=value"}),
+      field("spec.selection.resources.include", "包含资源类型", "csv", {full: true}),
+      field("spec.selection.resources.exclude", "排除资源类型", "csv", {full: true}),
+      field("spec.selection.includeClusterResources", "包含集群级资源", "checkbox"),
+      field("spec.selection.includeSecrets", "包含 Secret", "checkbox"),
+      field("spec.selection.includeCRDs", "包含 CRD", "checkbox"),
+      field("spec.selection.includeCustomResources", "包含 Custom Resource", "checkbox"),
+    ]},
+    {title: "PVC 快照", icon: "3", fields: [
+      field("spec.selection.pvc.enabled", "启用 CSI 快照", "checkbox", {refresh: true}),
+      field("spec.selection.pvc.snapshotClassName", "VolumeSnapshotClass", "text", {condition: ["spec.selection.pvc.enabled", true]}),
+      field("spec.selection.pvc.include", "包含 PVC", "csv", {condition: ["spec.selection.pvc.enabled", true]}),
+      field("spec.selection.pvc.exclude", "排除 PVC", "csv", {condition: ["spec.selection.pvc.enabled", true]}),
+      field("spec.selection.pvc.snapshotTimeout", "快照超时", "text", {condition: ["spec.selection.pvc.enabled", true]}),
+      field("spec.selection.pvc.failurePolicy", "失败策略", "select", {condition: ["spec.selection.pvc.enabled", true], options: [["ContinueAndMarkPartial", "继续并标记部分失败"], ["FailFast", "快速失败"]]}),
+      field("spec.selection.pvc.lifecycle", "快照生命周期", "select", {condition: ["spec.selection.pvc.enabled", true], options: [["RetainAfterRecordDeletion", "删除恢复点后保留"], ["DeleteWithRecord", "随恢复点删除"]]}),
+    ]},
+    {title: "调度规则", icon: "4", fields: [
       field("spec.schedule.cron", "Cron 表达式", "text", {required: true, help: "标准五字段 Cron，例如 0 2 * * *"}),
       field("spec.schedule.timezone", "时区", "select", {required: true, options: [["Asia/Shanghai", "Asia/Shanghai"], ["Etc/UTC", "Etc/UTC"]]}),
       field("spec.concurrencyPolicy", "并发策略", "select", {options: [["Forbid", "禁止并发"], ["Allow", "允许并发"], ["Replace", "替换旧任务"]]}),
@@ -116,7 +110,7 @@ const wizardSchemas = {
       field("spec.startingDeadline", "补偿截止时间", "text"),
       field("spec.timeout", "单次备份超时", "text"),
     ]},
-    {title: "保留与重试", icon: "3", fields: [
+    {title: "保留与重试", icon: "5", fields: [
       field("spec.retention.maxCopies", "最大副本数", "number", {required: true}),
       field("spec.retention.minCopies", "最小副本数", "number"),
       field("spec.retention.maxAgeDays", "最长保留天数", "number", {required: true}),
@@ -128,8 +122,7 @@ const wizardSchemas = {
   "backup-tasks": [
     {title: "手动备份", icon: "1", fields: [
       field("metadata.name", "任务名称", "text", {required: true, createOnly: true}),
-      field("spec.scopeRef.name", "备份范围", "select", {required: true, source: "scopes"}),
-      field("spec.repositoryRef.name", "备份仓库", "select", {required: true, source: "repositories"}),
+      field("spec.policyRef.name", "来源策略", "select", {required: true, source: "policies"}),
       field("spec.timeout", "任务超时", "text"),
       field("spec.failurePolicy", "失败策略", "select", {options: [["Continue", "继续并记录失败"], ["FailFast", "快速失败"]]}),
       field("spec.allowPartialRecord", "允许部分可用副本", "checkbox"),
@@ -138,7 +131,7 @@ const wizardSchemas = {
   "restore-tasks": [
     {title: "恢复来源", icon: "1", fields: [
       field("metadata.name", "任务名称", "text", {required: true, createOnly: true}),
-      field("spec.backupRecordRef.name", "备份记录", "select", {required: true, source: "records"}),
+      field("spec.backupRecordRef.name", "恢复点", "select", {required: true, source: "records"}),
       field("spec.targetClusterRef", "目标集群", "text", {required: true, immutable: true}),
       field("spec.mode", "Namespace 模式", "select", {refresh: true, options: [["Original", "恢复到原 Namespace"], ["NewNamespace", "恢复到新 Namespace"], ["Mapping", "Namespace 映射"]]}),
       field("spec.namespaceMapping", "Namespace 映射", "map", {full: true, condition: ["spec.mode", "Mapping"], help: "每行一个 source=target"}),
@@ -484,7 +477,7 @@ async function prepareWizardContext() {
   wizardState.busy = true;
   renderWizard();
   try {
-    const keys = ["repositories", "scopes", "records", wizardState.resource];
+    const keys = ["repositories", "policies", "records", wizardState.resource];
     const uniqueKeys = [...new Set(keys)];
     const responses = await Promise.all(uniqueKeys.map(key => api(`${API_BASE}/${key}`)));
     const context = {};
@@ -494,7 +487,7 @@ async function prepareWizardContext() {
     if (wizardState.operation === "create" && !wizardState.draft) {
       const references = {
         repository: context.repositories?.[0]?.metadata?.name,
-        scope: context.scopes?.[0]?.metadata?.name,
+        policy: context.policies?.[0]?.metadata?.name,
         record: context.records?.[0]?.metadata?.name,
       };
       wizardState.draft = resourceDefinitions[wizardState.resource].template(references);
@@ -575,7 +568,7 @@ function validateWizardDraft(draft) {
     });
   });
   if (wizardState.resource === "policies" && String(path(draft, "spec.schedule.cron", "")).trim().split(/\s+/).length !== 5) errors.push("Cron 必须包含五个字段");
-  if (wizardState.resource === "scopes" && path(draft, "spec.mode") === "Namespace" && !path(draft, "spec.includeNamespaces", []).length) errors.push("Namespace 模式至少包含一个 Namespace");
+  if (wizardState.resource === "policies" && path(draft, "spec.selection.mode") === "Namespace" && !path(draft, "spec.selection.includeNamespaces", []).length) errors.push("Namespace 模式至少包含一个 Namespace");
   if (wizardState.resource === "restore-tasks") {
     if (path(draft, "spec.restorePVC", false) && path(draft, "spec.metadataOnly", false)) errors.push("恢复 PVC 与仅恢复元数据不能同时启用");
     if (path(draft, "spec.conflictPolicy.allowRecreate", false) && !path(draft, "spec.conflictPolicy.highRiskConfirmed", false)) errors.push("允许删除重建时必须确认高风险操作");
@@ -601,9 +594,9 @@ function normalizeDraft(draft) {
     }
     if (!path(draft, "spec.encryption.enabled", false)) delete draft.spec.encryption.keyRef;
   }
-  if (wizardState.resource === "scopes") {
-    if (path(draft, "spec.mode") === "Cluster") delete draft.spec.includeNamespaces;
-    if (!Object.keys(path(draft, "spec.labelSelector.matchLabels", {})).length) delete draft.spec.labelSelector;
+  if (wizardState.resource === "policies") {
+    if (path(draft, "spec.selection.mode") === "Cluster") delete draft.spec.selection.includeNamespaces;
+    if (!Object.keys(path(draft, "spec.selection.labelSelector.matchLabels", {})).length) delete draft.spec.selection.labelSelector;
   }
   return draft;
 }
