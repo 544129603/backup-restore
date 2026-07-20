@@ -9,7 +9,7 @@
 | Kubernetes Context | `docker-desktop` |
 | Kubernetes | v1.36.1，单节点 `desktop-control-plane` Ready |
 | Helm Release | `backup-system/backup-restore`，revision 1（全新安装） |
-| Operator 镜像 | `backup-restore-operator:dev-local-12` |
+| Operator 镜像 | `backup-restore-operator:dev-local-13` |
 | Operator Pod | 1/1 Ready，启用 Leader Election 和 Admission Webhook |
 | CRD | 6 个，全部 Cluster-scoped、Established；选择范围已合并进 BackupPolicy |
 | clusterRef | `docker-desktop`，六个业务 CRD 均必填 |
@@ -28,7 +28,7 @@
 kubectl config use-context docker-desktop
 kubectl get nodes
 
-docker build --pull=false --build-arg VERSION=dev-local-12 -t backup-restore-operator:dev-local-12 .
+docker build --pull=false --build-arg VERSION=dev-local-13 -t backup-restore-operator:dev-local-13 .
 
 # Helm upgrade 不会升级 chart crds/，必须显式执行。
 kubectl apply -k config/crd/bases
@@ -74,7 +74,7 @@ kubectl logs deployment/backup-restore-operator -n backup-system --tail=200
 API Schema 门禁：
 
 - 五个业务 CRD 的 `spec.clusterRef` 存在且必填。
-- CRD、嵌套的 `BackupTask.spec.selectionSnapshot`、样例和备份包元数据均使用 Policy 内嵌 selection。
+- Policy Task 将策略当前配置固化到 `BackupTask.spec.backupSpec`；OneTime Task 直接内联同形状配置，样例、CRD 和备份记录保持一致。
 - 旧字段请求由 API Server strict decoding 拒绝。
 - 缺少 `clusterRef` 的请求由 CRD Schema 拒绝。
 
@@ -114,7 +114,7 @@ RUN_ENVTEST=1 go test ./test/integration -count=1 -v
 helm lint charts/backup-restore-operator
 helm template ...
 kubectl kustomize config/default
-docker build --build-arg VERSION=dev-local-12 -t backup-restore-operator:dev-local-12 .
+docker build --build-arg VERSION=dev-local-13 -t backup-restore-operator:dev-local-13 .
 ```
 
 EnvTest 使用 Kubernetes 1.32.0 API Server 二进制，RepositoryController 已在真实 EnvTest API Server 中进入 Ready。
