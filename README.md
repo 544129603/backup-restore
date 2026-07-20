@@ -1,12 +1,13 @@
 # Backup & Restore Operator
 
-基于 Kubernetes Operator 的集群级备份与同集群恢复实现。API 为 `protection.platform.io/v1alpha1`，7 个 CRD 全部是 Cluster-scoped；业务 Namespace 删除不会级联删除 `BackupRecord`。
+基于 Kubernetes Operator 的集群级备份与同集群恢复实现。API 为 `protection.platform.io/v1alpha1`，6 个 CRD 全部是 Cluster-scoped；业务 Namespace 删除不会级联删除 `BackupRecord`。
 
 ## 已实现能力
 
 - Local（预挂载 hostPath/PVC 路径）与 SFTP Repository；SFTP 支持密码/私钥、`known_hosts`、超时、并发、keepalive、临时文件上传及原子改名。
 - Cluster/Namespace 范围、GVR include/exclude、LabelSelector、Secret/CRD/CR 开关、资源清洗与范围预览。
 - 5 字段 Cron、IANA 时区、Forbid/Replace/Allow、RunOnce/RunAll/Skip、确定性任务名及重启防重。
+- Policy 计划备份与无需 Policy 的 OneTime 一次性备份；两者都固化完整执行配置并生成独立恢复点。
 - 流式采集、确定性 `tar.gz`、SHA-256 manifest、可选分块 AES-256-GCM、`.done` 提交点、独立 Record 二次校验。
 - CSI `VolumeSnapshot` 创建、等待、静态快照引用、同集群/跨 Namespace 恢复准备及生命周期删除。
 - 恢复计划、DryRun、Skip/Overwrite/Rename/Fail、受控删除重建、Namespace/CRD/集群资源/PVC/命名空间资源顺序恢复。

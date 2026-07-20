@@ -5,9 +5,7 @@ metadata:
 spec:
   clusterRef: cluster-a
   trigger: Manual
-  policyRef: {name: project-a-nightly}
-  timeout: 4h
-  retryPolicy: {maxAttempts: 3, backoff: 30s, maxBackoff: 10m}
-  failurePolicy: Continue
-  allowPartialRecord: true
+  source:
+    type: Policy
+    policyRef: {name: project-a-nightly}
   idempotencyKey: project-a/emergency/2026-07-13

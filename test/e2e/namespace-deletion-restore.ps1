@@ -126,11 +126,9 @@ metadata:
 spec:
   clusterRef: $ClusterRef
   trigger: Manual
-  policyRef: {name: $policyName}
-  timeout: 10m
-  retryPolicy: {maxAttempts: 2, backoff: 5s, maxBackoff: 30s}
-  failurePolicy: FailFast
-  allowPartialRecord: false
+  source:
+    type: Policy
+    policyRef: {name: $policyName}
   idempotencyKey: $ClusterRef/$backupTaskName
 "@
     Invoke-Native { $backupTask | kubectl apply -f - | Out-Host } "Create BackupTask"

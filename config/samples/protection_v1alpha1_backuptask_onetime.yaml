@@ -1,0 +1,36 @@
+apiVersion: protection.platform.io/v1alpha1
+kind: BackupTask
+metadata:
+  name: project-a-before-upgrade-20260720
+spec:
+  clusterRef: cluster-a
+  trigger: Manual
+  source:
+    type: OneTime
+  backupSpec:
+    repositoryRef: {name: local-repository}
+    selection:
+      mode: Namespace
+      includeNamespaces: [project-a]
+      resources:
+        include: [configmaps, secrets, services, deployments.apps, persistentvolumeclaims]
+        exclude: [events, pods]
+      includeSecrets: true
+      includeCustomResources: true
+      pvc:
+        enabled: true
+        snapshotClassName: longhorn-snapshot-vsc
+        snapshotTimeout: 10m
+        failurePolicy: ContinueAndMarkPartial
+        lifecycle: DeleteWithRecord
+      consistencyMode: CrashConsistent
+    retention:
+      maxCopies: 1
+      minCopies: 1
+      maxAgeDays: 30
+      deleteSnapshots: true
+    timeout: 4h
+    retryPolicy: {maxAttempts: 3, backoff: 30s, maxBackoff: 10m}
+    failurePolicy: Continue
+    allowPartialRecord: true
+  idempotencyKey: project-a/before-upgrade/2026-07-20

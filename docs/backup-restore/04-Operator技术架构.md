@@ -82,7 +82,7 @@ flowchart LR
 
 | 组件 | 输入/输出 | 关键规则 |
 |---|---|---|
-| ResourceCollector | `selectionSnapshot`→流式 unstructured objects | discovery+分页 List；RV 记录在 index；API QPS/burst 限流；单对象上限 |
+| ResourceCollector | `backupSpec.selection`→流式 unstructured objects | discovery+分页 List；RV 记录在 index；API QPS/burst 限流；单对象上限 |
 | ResourceFilter | 对象流→included/excluded+reason | 授权交集；exclude 优先；GVR/namespace/label/system rules |
 | ResourceSanitizer | included→可恢复 manifest+dependency index | 删除 runtime metadata/status/finalizer；owner 逻辑引用；Secret 不落日志 |
 | SnapshotManager | PVC plan→VolumeSnapshot/Content result | 确定名称、readyToUse、driver/class/handle、超时、生命周期 |
@@ -177,7 +177,7 @@ stateDiagram-v2
 | 状态 | 进入条件 | 动作/status | 成功 → | 失败 → | 重试/取消 |
 |---|---|---|---|---|---|
 | Pending | Task 创建 | 校验并发槽/锁；记录 queuedAt、reason | Validating | Failed（不可解析 spec） | 可重试 reconcile；可取消 |
-| Validating | 获得执行槽 | 校验 Policy/Repo refs UID、selectionSnapshot、授权未撤销、timeout；Validated | Preparing | Failed | 瞬态可重试；可取消 |
+| Validating | 获得执行槽 | Policy 来源解析一次并冻结 backupSpec；OneTime 来源直接校验 backupSpec；两者校验 Repo UID、spec hash、加密和 timeout | Preparing | Failed | 瞬态可重试；可取消 |
 | Preparing | 校验通过 | 创建 workspace/Job、检查临时空间和 Repo 容量、生成 backupID/checkpoint | CollectingResources | Failed | 可重试；可取消 |
 | CollectingResources | workspace ready | discovery/list/filter/sanitize/index；更新对象计数、RV、错误 | RunningPreHooks | Failed 或 partial flag | 分页可重试；可取消 |
 | RunningPreHooks | 采集完成 | V1.0 确认 disabled；V1.1 执行 pre、记录 hooks results | CreatingSnapshots | Failed/partial | Hook 按定义；可取消且必须 post/unquiesce |

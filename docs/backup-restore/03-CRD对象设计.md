@@ -13,7 +13,7 @@
 | RestoreTask | restoretasks | rtask | 一次恢复执行 |
 | BackupPluginConfig | backuppluginconfigs | bpconfig | 全局配置单例 |
 
-`BackupScope` 已被删除。选择范围不再作为独立对象复用，而是唯一存放在 `BackupPolicy.spec.selection` 中。手动 `BackupTask` 也不接受 selection 或 repository 输入，只接受 `policyRef`。
+`BackupScope` 已被删除。长期、周期性的保护范围存放在 `BackupPolicy.spec.selection`；临时的一次性备份直接在 `BackupTask.spec.backupSpec` 中定义，不需要创建 Policy。
 
 `clusterRef` 用于控制器路由和同集群边界校验，不表示终端用户权限。当前发行物仅允许集群管理员访问这些 CRD。
 
@@ -23,7 +23,8 @@
 flowchart LR
   C["BackupPluginConfig\n全局默认"] -.-> P["BackupPolicy\nselection + repository + schedule"]
   R["BackupRepository"] --> P
-  P -->|"生成；固化 selectionSnapshot"| T["BackupTask"]
+  P -->|"计划或立即执行；固化 backupSpec"| T["BackupTask"]
+  U["一次性备份请求"] -->|"内联 backupSpec"| T
   T -->|"提交并独立校验"| B["BackupRecord"]
   R -->|"保存 package"| B
   B -->|"恢复来源"| RT["RestoreTask"]
@@ -32,14 +33,14 @@ flowchart LR
 
 关系基数：
 
-- 一个 Policy 可产生多个 Task。
+- 一个 Policy 可产生多个 Task；OneTime Task 不关联 Policy。
 - 一个 Task 最多产生一个 Record；失败或取消任务可以没有 Record。
-- 每个 Record 必须同时保存来源 Policy 和来源 Task。
+- 每个 Record 必须保存来源 Task；只有 Policy 来源的 Record 保存可选 `policyRef`。
 - Task 是短期执行历史，Record 是长期恢复资产，两者删除不级联。
 
 ## 3. BackupPolicy
 
-Policy 是备份意图的唯一入口：内容、目的地、调度和保留规则作为一个对象保存。
+Policy 是可复用、周期性备份意图的入口：内容、目的地、调度和保留规则作为一个对象保存。
 
 ```yaml
 apiVersion: protection.platform.io/v1alpha1
@@ -92,7 +93,9 @@ Policy Controller 每 10 分钟或 generation 变化时刷新 `status.selectionP
 
 ## 4. BackupTask
 
-Task 必须引用 Policy。定时 Task 创建时已经固化参数；手动 Task 可只提交以下字段：
+Task 有两种明确来源：`Policy` 用于计划或从策略立即执行，`OneTime` 用于不需要复用的临时备份。
+
+从策略立即执行只提交来源引用，Controller 在 Pending 阶段解析并固化策略当前配置：
 
 ```yaml
 apiVersion: protection.platform.io/v1alpha1
@@ -102,25 +105,34 @@ metadata:
 spec:
   clusterRef: cluster-a
   trigger: Manual
-  policyRef: {name: project-a-nightly}
-  timeout: 4h
-  failurePolicy: Continue
-  allowPartialRecord: true
+  source:
+    type: Policy
+    policyRef: {name: project-a-nightly}
   idempotencyKey: project-a/emergency/2026-07-16
 ```
 
-Controller 在 Pending 阶段仅允许一次解析并写入：
+一次性备份直接携带完整执行配置：
 
 ```yaml
 spec:
-  policyRef: {name: project-a-nightly, uid: "..."}
-  policyGeneration: 3
-  repositoryRef: {name: sftp-primary, uid: "..."}
-  repositoryGeneration: 2
-  selectionSnapshot: {...}
+  clusterRef: cluster-a
+  trigger: Manual
+  source: {type: OneTime}
+  backupSpec:
+    repositoryRef: {name: sftp-primary}
+    selection:
+      mode: Namespace
+      includeNamespaces: [project-a]
+      pvc: {enabled: true, lifecycle: DeleteWithRecord}
+      consistencyMode: CrashConsistent
+    retention: {maxCopies: 1, minCopies: 1, maxAgeDays: 30, deleteSnapshots: true}
+    timeout: 4h
+    retryPolicy: {maxAttempts: 3, backoff: 30s, maxBackoff: 10m}
+    failurePolicy: Continue
+    allowPartialRecord: true
 ```
 
-之后除 `cancelRequested/cancelReason` 外 spec 全部不可变。任务运行只使用 `selectionSnapshot`，不受 Policy 后续修改或删除影响。
+两种来源最终都得到完整、不可变的 `backupSpec`、`backupSpecHash` 和 Repository UID/generation；Policy 来源还保存 Policy UID/generation。之后除 `cancelRequested/cancelReason` 外 spec 全部不可变，运行过程只读取冻结配置，不受 Policy 后续修改或删除影响。
 
 Task 通过 `status.recordRef` 指向生成的 Record。Task Completed 只表示执行流程完成；是否真正可恢复必须读取 Record 的 availability 和 `restorable`。
 
@@ -129,8 +141,9 @@ Task 通过 `status.recordRef` 指向生成的 Record。Task Completed 只表示
 Record 只能由 Controller 创建，spec 全部不可变，且必须包含：
 
 - `sourceTaskRef{name,uid}`；
-- `policyRef{name,uid}`；
+- `sourceType=Policy|OneTime`，Policy 来源额外保存可选 `policyRef{name,uid}`；
 - `repositoryRef{name,uid}`；
+- 完整 `backupSpec` 与 `backupSpecHash`；
 - backupID、路径、checksum、格式版本、inventory、snapshot 和 expiresAt。
 
 availability：`Available|PartiallyAvailable|Verifying|Broken|SnapshotMissing|RepoUnavailable|Expired|Deleting|Deleted`。只有 `status.restorable=true` 的恢复点可进入正常恢复流程。

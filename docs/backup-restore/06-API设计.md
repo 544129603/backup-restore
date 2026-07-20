@@ -136,7 +136,7 @@ Preview 请求/响应摘要：
 | POST `/policies` | Policy spec；201 | policy.manage | cron/ref/retention 422 |
 | GET/PUT `/policies/{name}` | 详情/乐观并发更新 | policy.read/manage | 404/409/immutable |
 | POST `/policies/{name}:enable|disable|suspend|resume` | resourceVersion,reason,`skipImmediate`（resume 可选） | policy.manage | Repo not ready/Selection invalid |
-| POST `/policies/{name}:run` | overrides(timeout,failurePolicy), Idempotency-Key；202 BackupTask | backup.execute | BR-REPO-CAPACITY-006 |
+| POST `/policies/{name}:run` | Idempotency-Key；202 `source.type=Policy` BackupTask；不修改调度时间 | backup.execute | ref/permission/capacity |
 | POST `/policies/{name}:clone` | newName,optional refs；201 enabled=false | policy.manage | 422 |
 | DELETE `/policies/{name}` | confirmName；202；响应明确历史对象不删除 | policy.delete | 409 active mutation only |
 
@@ -147,7 +147,7 @@ Policy 更新响应包含 `impact`：`effectiveForNewTasks=true`、`activeTasksU
 | Method/Path | 请求/返回 | 权限 | 错误 |
 |---|---|---|---|
 | GET `/backup-tasks` | cluster,trigger,policy,phase,errorCode,start/end,paging | task.read | 403 |
-| POST `/backup-tasks` | 必填 policyRef；selection/repository/timeout/retry 由 Controller 从 Policy 一次性固化；202 | backup.execute | ref/permission/capacity |
+| POST `/backup-tasks` | `source.type=Policy` 时必填 policyRef；`source.type=OneTime` 时必填完整 backupSpec；202 | backup.execute | ref/selection/permission/capacity |
 | GET `/backup-tasks/{name}` | `include=steps,conditions,summary`；详情 | task.read | 404 |
 | GET `/backup-tasks/{name}/resources` | GVR/namespace/result/paging | 对象结果索引 | task.read | 410 detail expired |
 | GET `/backup-tasks/{name}/snapshots` | result/storageClass/paging | PVC 快照结果（handle 脱敏） | task.read | 403 sensitive |
@@ -156,14 +156,37 @@ Policy 更新响应包含 `impact`：`effectiveForNewTasks=true`、`activeTasksU
 | GET `/backup-tasks/{name}/logs` | `follow=false,tailLines=1000,sinceTime,level,download` | text/event-stream 或分页 JSON | task.logs | 410 expired/429 |
 | GET `/backup-tasks/{name}/events` | paging | 稳定 domain events | task.read | - |
 
-创建手动 Task：
+从策略立即执行：
 
 ```json
 {
   "metadata": {"namePrefix": "emergency-before-upgrade"},
   "spec": {
     "clusterRef": "cluster-a",
-    "policyRef": {"name": "before-upgrade"}
+    "trigger": "Manual",
+    "source": {"type": "Policy", "policyRef": {"name": "daily-backup"}}
+  }
+}
+```
+
+一次性备份：
+
+```json
+{
+  "metadata": {"namePrefix": "emergency-before-upgrade"},
+  "spec": {
+    "clusterRef": "cluster-a",
+    "trigger": "Manual",
+    "source": {"type": "OneTime"},
+    "backupSpec": {
+      "repositoryRef": {"name": "sftp-primary"},
+      "selection": {"mode": "Namespace", "includeNamespaces": ["project-a"]},
+      "retention": {"maxCopies": 1, "minCopies": 1, "maxAgeDays": 30},
+      "timeout": "4h",
+      "retryPolicy": {"maxAttempts": 3, "backoff": "30s", "maxBackoff": "10m"},
+      "failurePolicy": "Continue",
+      "allowPartialRecord": true
+    }
   }
 }
 ```
