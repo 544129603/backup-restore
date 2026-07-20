@@ -118,10 +118,6 @@ func (r *ResourceRestorer) Apply(ctx context.Context, root string, item PlanItem
 	return ApplyResult{Action: action, TargetName: item.TargetName, TargetNamespace: item.TargetNamespace}, nil
 }
 
-type resourceInterface interface {
-	Get(context.Context, string, metav1.GetOptions, ...string) (*unstructured.Unstructured, error)
-}
-
 func (r *ResourceRestorer) availableName(ctx context.Context, client dynamic.ResourceInterface, base string) (string, error) {
 	for i := 0; i < 10; i++ {
 		candidate := base

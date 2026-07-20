@@ -231,6 +231,19 @@ func validateSelection(selection BackupSelectionSpec) error {
 	return nil
 }
 
+func validateBackupExecution(spec BackupExecutionSpec) error {
+	if spec.RepositoryRef.Name == "" {
+		return fmt.Errorf("repositoryRef is required")
+	}
+	if err := validateSelection(spec.Selection); err != nil {
+		return fmt.Errorf("selection: %w", err)
+	}
+	if spec.Timeout.Duration <= 0 || spec.Retention.MaxCopies < 1 || spec.Retention.MinCopies > spec.Retention.MaxCopies || spec.Retention.MaxAgeDays < 1 {
+		return fmt.Errorf("timeout and retention values are invalid")
+	}
+	return nil
+}
+
 // +kubebuilder:webhook:path=/validate-protection-platform-io-v1alpha1-backuppolicy,mutating=false,failurePolicy=fail,sideEffects=None,groups=protection.platform.io,resources=backuppolicies,verbs=create;update,versions=v1alpha1,name=vbackuppolicy.protection.platform.io,admissionReviewVersions=v1
 func (p *BackupPolicy) ValidateCreate() (admission.Warnings, error) { return nil, p.validate() }
 func (p *BackupPolicy) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
@@ -270,25 +283,38 @@ func (p *BackupPolicy) validate() error {
 }
 
 // +kubebuilder:webhook:path=/validate-protection-platform-io-v1alpha1-backuptask,mutating=false,failurePolicy=fail,sideEffects=None,groups=protection.platform.io,resources=backuptasks,verbs=create;update,versions=v1alpha1,name=vbackuptask.protection.platform.io,admissionReviewVersions=v1
-func (t *BackupTask) ValidateCreate() (admission.Warnings, error) { return nil, t.validate() }
+func (t *BackupTask) ValidateCreate() (admission.Warnings, error) {
+	if t.Spec.Source.Type == BackupTaskSourcePolicy && t.Spec.Trigger == BackupTriggerManual && t.Spec.BackupSpec != nil {
+		return nil, fmt.Errorf("manual Policy task must let the controller resolve backupSpec")
+	}
+	return nil, t.validate()
+}
 func (t *BackupTask) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	previous, ok := old.(*BackupTask)
 	if !ok {
 		return nil, fmt.Errorf("expected BackupTask")
 	}
-	oldSpec, newSpec := previous.Spec, t.Spec
+	oldSpec, newSpec := *previous.Spec.DeepCopy(), *t.Spec.DeepCopy()
 	oldSpec.CancelRequested, newSpec.CancelRequested = false, false
 	oldSpec.CancelReason, newSpec.CancelReason = "", ""
-	// A manual task may resolve and freeze its policy selection exactly once before work
-	// starts. Subsequent updates remain immutable.
-	if previous.Spec.SelectionSnapshot == nil && t.Spec.SelectionSnapshot != nil && (previous.Status.Phase == "" || previous.Status.Phase == BackupPhasePending) {
-		oldSpec.PolicyRef = newSpec.PolicyRef
-		oldSpec.RepositoryRef = newSpec.RepositoryRef
-		oldSpec.SelectionSnapshot = newSpec.SelectionSnapshot
-		oldSpec.PolicyGeneration = newSpec.PolicyGeneration
-		oldSpec.RepositoryGeneration = newSpec.RepositoryGeneration
-		oldSpec.Timeout = newSpec.Timeout
-		oldSpec.RetryPolicy = newSpec.RetryPolicy
+	// Policy tasks may resolve their execution spec once. One-time tasks may
+	// only have repository identity and the immutable spec hash filled once.
+	if previous.Status.Phase == "" || previous.Status.Phase == BackupPhasePending {
+		if previous.Spec.BackupSpec == nil && t.Spec.BackupSpec != nil && previous.Spec.Source.Type == BackupTaskSourcePolicy {
+			oldSpec.Source = newSpec.Source
+			oldSpec.BackupSpec = newSpec.BackupSpec
+			oldSpec.BackupSpecHash = newSpec.BackupSpecHash
+			oldSpec.PolicyGeneration = newSpec.PolicyGeneration
+			oldSpec.RepositoryGeneration = newSpec.RepositoryGeneration
+		} else if previous.Spec.BackupSpec != nil && previous.Spec.BackupSpecHash == "" && t.Spec.BackupSpecHash != "" {
+			oldSpec.BackupSpec.RepositoryRef = newSpec.BackupSpec.RepositoryRef
+			oldSpec.BackupSpecHash = newSpec.BackupSpecHash
+			oldSpec.RepositoryGeneration = newSpec.RepositoryGeneration
+			if previous.Spec.Source.Type == BackupTaskSourcePolicy {
+				oldSpec.Source = newSpec.Source
+				oldSpec.PolicyGeneration = newSpec.PolicyGeneration
+			}
+		}
 	}
 	if !reflect.DeepEqual(oldSpec, newSpec) {
 		return nil, fmt.Errorf("BackupTask spec is immutable except cancelRequested and cancelReason")
@@ -303,16 +329,27 @@ func (t *BackupTask) validate() error {
 	if err := validateIdentity(t.Spec.ResourceIdentity); err != nil {
 		return err
 	}
-	if t.Spec.PolicyRef.Name == "" {
-		return fmt.Errorf("policyRef is required")
+	switch t.Spec.Source.Type {
+	case BackupTaskSourcePolicy:
+		if t.Spec.Source.PolicyRef == nil || t.Spec.Source.PolicyRef.Name == "" {
+			return fmt.Errorf("Policy source requires policyRef")
+		}
+	case BackupTaskSourceOneTime:
+		if t.Spec.Source.PolicyRef != nil {
+			return fmt.Errorf("OneTime source cannot set policyRef")
+		}
+		if t.Spec.Trigger == BackupTriggerSchedule {
+			return fmt.Errorf("scheduled task must use Policy source")
+		}
+	default:
+		return fmt.Errorf("unsupported task source type %q", t.Spec.Source.Type)
 	}
-	if t.Spec.SelectionSnapshot != nil {
-		if t.Spec.RepositoryRef.Name == "" {
-			return fmt.Errorf("resolved task requires repositoryRef")
+	if t.Spec.BackupSpec != nil {
+		if err := validateBackupExecution(*t.Spec.BackupSpec); err != nil {
+			return fmt.Errorf("backupSpec: %w", err)
 		}
-		if err := validateSelection(*t.Spec.SelectionSnapshot); err != nil {
-			return fmt.Errorf("selectionSnapshot: %w", err)
-		}
+	} else if t.Spec.Source.Type == BackupTaskSourceOneTime || t.Spec.Trigger != BackupTriggerManual {
+		return fmt.Errorf("backupSpec is required for OneTime, scheduled, and retry tasks")
 	}
 	if t.Spec.Trigger == BackupTriggerSchedule && t.Spec.ScheduledAt == nil {
 		return fmt.Errorf("scheduled task requires scheduledAt")
@@ -328,8 +365,21 @@ func (r *BackupRecord) ValidateCreate() (admission.Warnings, error) {
 	if err := validateIdentity(r.Spec.ResourceIdentity); err != nil {
 		return nil, err
 	}
-	if r.Spec.BackupID == "" || r.Spec.SourceTaskRef.Name == "" || r.Spec.PolicyRef.Name == "" || r.Spec.RepositoryRef.Name == "" || !safeRelativePath(r.Spec.BackupPath) || r.Spec.Checksum == "" {
+	if r.Spec.BackupID == "" || r.Spec.SourceTaskRef.Name == "" || r.Spec.RepositoryRef.Name == "" || r.Spec.BackupSpecHash == "" || !safeRelativePath(r.Spec.BackupPath) || r.Spec.Checksum == "" {
 		return nil, fmt.Errorf("backupID, references, safe backupPath and checksum are required")
+	}
+	if r.Spec.SourceType == BackupTaskSourcePolicy {
+		if r.Spec.PolicyRef == nil || r.Spec.PolicyRef.Name == "" {
+			return nil, fmt.Errorf("Policy record requires policyRef")
+		}
+	} else if r.Spec.SourceType != BackupTaskSourceOneTime || r.Spec.PolicyRef != nil {
+		return nil, fmt.Errorf("record sourceType and policyRef are inconsistent")
+	}
+	if r.Spec.BackupSpec.RepositoryRef.Name != r.Spec.RepositoryRef.Name {
+		return nil, fmt.Errorf("backupSpec repositoryRef must match record repositoryRef")
+	}
+	if err := validateBackupExecution(r.Spec.BackupSpec); err != nil {
+		return nil, fmt.Errorf("backupSpec: %w", err)
 	}
 	return nil, nil
 }

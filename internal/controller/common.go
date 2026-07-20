@@ -19,8 +19,6 @@ import (
 	opererrors "github.com/example/backup-restore-operator/internal/errors"
 )
 
-const defaultRequeue = 10 * time.Second
-
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 
 func containsString(values []string, expected string) bool {

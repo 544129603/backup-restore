@@ -46,10 +46,14 @@ type RecordEncryptionSpec struct {
 }
 
 type BackupRecordSpec struct {
-	ResourceIdentity    `json:",inline"`
-	BackupID            string               `json:"backupID"`
-	SourceTaskRef       ObjectReference      `json:"sourceTaskRef"`
-	PolicyRef           ObjectReference      `json:"policyRef"`
+	ResourceIdentity `json:",inline"`
+	BackupID         string          `json:"backupID"`
+	SourceTaskRef    ObjectReference `json:"sourceTaskRef"`
+	// +kubebuilder:validation:Enum=Policy;OneTime
+	SourceType          string               `json:"sourceType"`
+	PolicyRef           *ObjectReference     `json:"policyRef,omitempty"`
+	BackupSpec          BackupExecutionSpec  `json:"backupSpec"`
+	BackupSpecHash      string               `json:"backupSpecHash"`
 	RepositoryRef       ObjectReference      `json:"repositoryRef"`
 	Source              BackupSource         `json:"source"`
 	BackupPath          string               `json:"backupPath"`
@@ -87,13 +91,16 @@ type BackupRecordStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,shortName=brecord
+// +kubebuilder:printcolumn:name="Source",type=string,JSONPath=`.spec.sourceType`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=`.spec.source.clusterRef`
 // +kubebuilder:printcolumn:name="Repository",type=string,JSONPath=`.spec.repositoryRef.name`
 // +kubebuilder:printcolumn:name="Resources",type=integer,JSONPath=`.spec.inventory.resourceCount`
 // +kubebuilder:printcolumn:name="PVCs",type=integer,JSONPath=`.spec.inventory.pvcCount`
 // +kubebuilder:printcolumn:name="Bytes",type=integer,JSONPath=`.spec.inventory.backupBytes`
-// +kubebuilder:printcolumn:name="Expires",type=date,JSONPath=`.spec.expiresAt`
+// Future timestamps are rendered as <invalid> by kubectl's date formatter, so
+// keep the RFC3339 value visible instead of treating it as an object age.
+// +kubebuilder:printcolumn:name="Expires",type=string,JSONPath=`.spec.expiresAt`
 type BackupRecord struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -47,7 +47,7 @@ func (r *RetentionReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	}
 	records := make([]protectionv1alpha1.BackupRecord, 0)
 	for i := range list.Items {
-		if list.Items[i].Spec.PolicyRef.UID == string(policy.UID) {
+		if list.Items[i].Spec.PolicyRef != nil && list.Items[i].Spec.PolicyRef.UID == string(policy.UID) {
 			records = append(records, list.Items[i])
 		}
 	}

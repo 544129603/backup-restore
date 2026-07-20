@@ -6,6 +6,8 @@ package v1alpha1
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 const (
+	BackupTaskSourcePolicy         = "Policy"
+	BackupTaskSourceOneTime        = "OneTime"
 	BackupTriggerManual            = "Manual"
 	BackupTriggerSchedule          = "Schedule"
 	BackupTriggerRetry             = "Retry"
@@ -27,19 +29,13 @@ const (
 	BackupPhaseCancelled           = "Cancelled"
 )
 
-type BackupTaskSpec struct {
-	ResourceIdentity `json:",inline"`
-	// +kubebuilder:validation:Enum=Manual;Schedule;Retry;Clone
-	Trigger       string           `json:"trigger"`
-	PolicyRef     ObjectReference  `json:"policyRef"`
-	ParentTaskRef *ObjectReference `json:"parentTaskRef,omitempty"`
-	ScheduledAt   *metav1.Time     `json:"scheduledAt,omitempty"`
-	// RepositoryRef and SelectionSnapshot are resolved from PolicyRef before
-	// execution. Scheduled tasks are born resolved; manual tasks may resolve once.
-	RepositoryRef        ObjectReference      `json:"repositoryRef,omitempty"`
-	SelectionSnapshot    *BackupSelectionSpec `json:"selectionSnapshot,omitempty"`
-	PolicyGeneration     int64                `json:"policyGeneration,omitempty"`
-	RepositoryGeneration int64                `json:"repositoryGeneration,omitempty"`
+// BackupExecutionSpec is the immutable configuration used by one backup
+// execution. Policies provide the same shape and tasks freeze a copy so a
+// running task never changes when its source policy is edited or deleted.
+type BackupExecutionSpec struct {
+	RepositoryRef ObjectReference     `json:"repositoryRef"`
+	Selection     BackupSelectionSpec `json:"selection"`
+	Retention     RetentionSpec       `json:"retention,omitempty"`
 	// +kubebuilder:default:="4h"
 	Timeout     metav1.Duration `json:"timeout,omitempty"`
 	RetryPolicy RetryPolicy     `json:"retryPolicy,omitempty"`
@@ -47,10 +43,31 @@ type BackupTaskSpec struct {
 	// +kubebuilder:default:=Continue
 	FailurePolicy string `json:"failurePolicy,omitempty"`
 	// +kubebuilder:default:=true
-	AllowPartialRecord bool   `json:"allowPartialRecord,omitempty"`
-	CancelRequested    bool   `json:"cancelRequested,omitempty"`
-	CancelReason       string `json:"cancelReason,omitempty"`
-	IdempotencyKey     string `json:"idempotencyKey,omitempty"`
+	AllowPartialRecord bool `json:"allowPartialRecord,omitempty"`
+}
+
+type BackupTaskSource struct {
+	// +kubebuilder:validation:Enum=Policy;OneTime
+	Type      string           `json:"type"`
+	PolicyRef *ObjectReference `json:"policyRef,omitempty"`
+}
+
+type BackupTaskSpec struct {
+	ResourceIdentity `json:",inline"`
+	// +kubebuilder:validation:Enum=Manual;Schedule;Retry;Clone
+	Trigger       string           `json:"trigger"`
+	Source        BackupTaskSource `json:"source"`
+	ParentTaskRef *ObjectReference `json:"parentTaskRef,omitempty"`
+	ScheduledAt   *metav1.Time     `json:"scheduledAt,omitempty"`
+	// BackupSpec is required at creation for OneTime tasks. Policy tasks may be
+	// created unresolved and have this field frozen exactly once while Pending.
+	BackupSpec           *BackupExecutionSpec `json:"backupSpec,omitempty"`
+	BackupSpecHash       string               `json:"backupSpecHash,omitempty"`
+	PolicyGeneration     int64                `json:"policyGeneration,omitempty"`
+	RepositoryGeneration int64                `json:"repositoryGeneration,omitempty"`
+	CancelRequested      bool                 `json:"cancelRequested,omitempty"`
+	CancelReason         string               `json:"cancelReason,omitempty"`
+	IdempotencyKey       string               `json:"idempotencyKey,omitempty"`
 }
 
 type TaskCheckpoint struct {
@@ -83,6 +100,7 @@ type BackupTaskStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,shortName=btask
+// +kubebuilder:printcolumn:name="Source",type=string,JSONPath=`.spec.source.type`
 // +kubebuilder:printcolumn:name="Trigger",type=string,JSONPath=`.spec.trigger`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Progress",type=integer,JSONPath=`.status.progress.percent`

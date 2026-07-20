@@ -63,7 +63,10 @@ func TestPolicyReconcileCreatesOnlyOneDeterministicTask(t *testing.T) {
 	require.NoError(t, kube.List(ctx, list))
 	require.Len(t, list.Items, 1)
 	require.Equal(t, protectionv1alpha1.BackupTriggerSchedule, list.Items[0].Spec.Trigger)
-	require.NotNil(t, list.Items[0].Spec.SelectionSnapshot)
+	require.Equal(t, protectionv1alpha1.BackupTaskSourcePolicy, list.Items[0].Spec.Source.Type)
+	require.NotNil(t, list.Items[0].Spec.BackupSpec)
+	require.Equal(t, []string{"app"}, list.Items[0].Spec.BackupSpec.Selection.IncludeNamespaces)
+	require.NotEmpty(t, list.Items[0].Spec.BackupSpecHash)
 }
 
 func TestManualBackupTaskResolvesMergedPolicyOnce(t *testing.T) {
@@ -92,7 +95,8 @@ func TestManualBackupTaskResolvesMergedPolicyOnce(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "manual", UID: types.UID(uuid.NewUUID())},
 		Spec: protectionv1alpha1.BackupTaskSpec{
 			ResourceIdentity: protectionv1alpha1.ResourceIdentity{ClusterRef: "c1"},
-			Trigger:          protectionv1alpha1.BackupTriggerManual, PolicyRef: protectionv1alpha1.ObjectReference{Name: policy.Name},
+			Trigger:          protectionv1alpha1.BackupTriggerManual,
+			Source:           protectionv1alpha1.BackupTaskSource{Type: protectionv1alpha1.BackupTaskSourcePolicy, PolicyRef: &protectionv1alpha1.ObjectReference{Name: policy.Name}},
 		},
 	}
 	kube := fake.NewClientBuilder().WithScheme(scheme).
@@ -106,20 +110,59 @@ func TestManualBackupTaskResolvesMergedPolicyOnce(t *testing.T) {
 	require.NoError(t, err)
 	actual := &protectionv1alpha1.BackupTask{}
 	require.NoError(t, kube.Get(ctx, client.ObjectKey{Name: task.Name}, actual))
-	require.Equal(t, string(policy.UID), actual.Spec.PolicyRef.UID)
-	require.Equal(t, string(repository.UID), actual.Spec.RepositoryRef.UID)
+	require.Equal(t, string(policy.UID), actual.Spec.Source.PolicyRef.UID)
+	require.Equal(t, string(repository.UID), actual.Spec.BackupSpec.RepositoryRef.UID)
 	require.Equal(t, int64(7), actual.Spec.PolicyGeneration)
-	require.NotNil(t, actual.Spec.SelectionSnapshot)
-	require.Equal(t, []string{"payments"}, actual.Spec.SelectionSnapshot.IncludeNamespaces)
-	require.Equal(t, 2*time.Hour, actual.Spec.Timeout.Duration)
-	require.Equal(t, int32(5), actual.Spec.RetryPolicy.MaxAttempts)
+	require.NotNil(t, actual.Spec.BackupSpec)
+	require.Equal(t, []string{"payments"}, actual.Spec.BackupSpec.Selection.IncludeNamespaces)
+	require.Equal(t, 2*time.Hour, actual.Spec.BackupSpec.Timeout.Duration)
+	require.Equal(t, int32(5), actual.Spec.BackupSpec.RetryPolicy.MaxAttempts)
+	require.NotEmpty(t, actual.Spec.BackupSpecHash)
+	require.Equal(t, protectionv1alpha1.BackupPhaseValidating, actual.Status.Phase)
+}
+
+func TestOneTimeBackupTaskFreezesRepositoryIdentity(t *testing.T) {
+	ctx := context.Background()
+	scheme := testScheme(t)
+	repository := &protectionv1alpha1.BackupRepository{
+		ObjectMeta: metav1.ObjectMeta{Name: "repo", UID: types.UID(uuid.NewUUID()), Generation: 4},
+		Spec:       protectionv1alpha1.BackupRepositorySpec{ResourceIdentity: protectionv1alpha1.ResourceIdentity{ClusterRef: "c1"}},
+		Status:     protectionv1alpha1.BackupRepositoryStatus{CommonStatus: protectionv1alpha1.CommonStatus{Phase: protectionv1alpha1.RepositoryPhaseReady}},
+	}
+	task := &protectionv1alpha1.BackupTask{
+		ObjectMeta: metav1.ObjectMeta{Name: "one-time", UID: types.UID(uuid.NewUUID())},
+		Spec: protectionv1alpha1.BackupTaskSpec{
+			ResourceIdentity: protectionv1alpha1.ResourceIdentity{ClusterRef: "c1"},
+			Trigger:          protectionv1alpha1.BackupTriggerManual,
+			Source:           protectionv1alpha1.BackupTaskSource{Type: protectionv1alpha1.BackupTaskSourceOneTime},
+			BackupSpec: &protectionv1alpha1.BackupExecutionSpec{
+				RepositoryRef: protectionv1alpha1.ObjectReference{Name: repository.Name},
+				Selection:     protectionv1alpha1.BackupSelectionSpec{Mode: protectionv1alpha1.BackupSelectionModeNamespace, IncludeNamespaces: []string{"payments"}},
+			},
+		},
+	}
+	task.Default()
+	kube := fake.NewClientBuilder().WithScheme(scheme).
+		WithStatusSubresource(&protectionv1alpha1.BackupRepository{}, &protectionv1alpha1.BackupTask{}).
+		WithObjects(repository, task).Build()
+	reconciler := &BackupTaskReconciler{Client: kube, Workspace: t.TempDir()}
+	request := reconcile.Request{NamespacedName: client.ObjectKey{Name: task.Name}}
+	_, err := reconciler.Reconcile(ctx, request)
+	require.NoError(t, err)
+	_, err = reconciler.Reconcile(ctx, request)
+	require.NoError(t, err)
+	actual := &protectionv1alpha1.BackupTask{}
+	require.NoError(t, kube.Get(ctx, client.ObjectKey{Name: task.Name}, actual))
+	require.Equal(t, string(repository.UID), actual.Spec.BackupSpec.RepositoryRef.UID)
+	require.Equal(t, int64(4), actual.Spec.RepositoryGeneration)
+	require.NotEmpty(t, actual.Spec.BackupSpecHash)
 	require.Equal(t, protectionv1alpha1.BackupPhaseValidating, actual.Status.Phase)
 }
 
 func TestBackupTaskCancellationIsTerminal(t *testing.T) {
 	ctx := context.Background()
 	scheme := testScheme(t)
-	task := &protectionv1alpha1.BackupTask{ObjectMeta: metav1.ObjectMeta{Name: "manual", UID: types.UID(uuid.NewUUID())}, Spec: protectionv1alpha1.BackupTaskSpec{ResourceIdentity: protectionv1alpha1.ResourceIdentity{ClusterRef: "c1"}, Trigger: protectionv1alpha1.BackupTriggerManual, PolicyRef: protectionv1alpha1.ObjectReference{Name: "policy"}, Timeout: metav1.Duration{Duration: time.Hour}}}
+	task := &protectionv1alpha1.BackupTask{ObjectMeta: metav1.ObjectMeta{Name: "manual", UID: types.UID(uuid.NewUUID())}, Spec: protectionv1alpha1.BackupTaskSpec{ResourceIdentity: protectionv1alpha1.ResourceIdentity{ClusterRef: "c1"}, Trigger: protectionv1alpha1.BackupTriggerManual, Source: protectionv1alpha1.BackupTaskSource{Type: protectionv1alpha1.BackupTaskSourcePolicy, PolicyRef: &protectionv1alpha1.ObjectReference{Name: "policy"}}}}
 	kube := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&protectionv1alpha1.BackupTask{}).WithObjects(task).Build()
 	dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 	reconciler := &BackupTaskReconciler{Client: kube, Snapshots: &snapshot.Manager{Client: kube, Dynamic: dynamicClient}, Workspace: t.TempDir()}
@@ -151,7 +194,7 @@ func TestBackupRecordIndependentVerification(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(backupPath, "sha256sum.txt"), []byte(checksum.Manifest(map[string]string{"resources.tar.gz": sum})), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(backupPath, ".done"), []byte(sum+"\n"), 0o600))
 	repository := &protectionv1alpha1.BackupRepository{ObjectMeta: metav1.ObjectMeta{Name: "repo"}, Spec: protectionv1alpha1.BackupRepositorySpec{ResourceIdentity: protectionv1alpha1.ResourceIdentity{ClusterRef: "c1"}, Type: protectionv1alpha1.RepositoryTypeLocal, Enabled: true, Local: &protectionv1alpha1.LocalRepositorySpec{Mode: protectionv1alpha1.LocalModeHostPath, Path: root, NodeName: "worker"}}}
-	record := &protectionv1alpha1.BackupRecord{ObjectMeta: metav1.ObjectMeta{Name: "record"}, Spec: protectionv1alpha1.BackupRecordSpec{ResourceIdentity: protectionv1alpha1.ResourceIdentity{ClusterRef: "c1"}, BackupID: "id", SourceTaskRef: protectionv1alpha1.ObjectReference{Name: "task"}, PolicyRef: protectionv1alpha1.ObjectReference{Name: "policy"}, RepositoryRef: protectionv1alpha1.ObjectReference{Name: "repo"}, Source: protectionv1alpha1.BackupSource{ClusterRef: "c1"}, BackupPath: "backups/id", Checksum: sum, FormatVersion: "1.0", ContentCompleteness: "Complete"}}
+	record := &protectionv1alpha1.BackupRecord{ObjectMeta: metav1.ObjectMeta{Name: "record"}, Spec: protectionv1alpha1.BackupRecordSpec{ResourceIdentity: protectionv1alpha1.ResourceIdentity{ClusterRef: "c1"}, BackupID: "id", SourceTaskRef: protectionv1alpha1.ObjectReference{Name: "task"}, SourceType: protectionv1alpha1.BackupTaskSourcePolicy, PolicyRef: &protectionv1alpha1.ObjectReference{Name: "policy"}, BackupSpec: protectionv1alpha1.BackupExecutionSpec{RepositoryRef: protectionv1alpha1.ObjectReference{Name: "repo"}}, BackupSpecHash: "hash", RepositoryRef: protectionv1alpha1.ObjectReference{Name: "repo"}, Source: protectionv1alpha1.BackupSource{ClusterRef: "c1"}, BackupPath: "backups/id", Checksum: sum, FormatVersion: "1.0", ContentCompleteness: "Complete"}}
 	kube := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&protectionv1alpha1.BackupRecord{}).WithObjects(repository, record).Build()
 	reconciler := &BackupRecordReconciler{Client: kube, Factory: repofactory.Factory{Client: kube}, Snapshots: &snapshot.Manager{Client: kube, Dynamic: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())}}
 	_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKey{Name: record.Name}})

@@ -51,20 +51,51 @@ func TestRepositoryValidationRejectsPlainOrUnsafeSFTP(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestTaskOneTimeSelectionFreeze(t *testing.T) {
-	oldTask := &BackupTask{Spec: BackupTaskSpec{ResourceIdentity: ResourceIdentity{ClusterRef: "c1"}, Trigger: BackupTriggerManual, PolicyRef: ObjectReference{Name: "policy"}, Timeout: metav1.Duration{Duration: time.Hour}}, Status: BackupTaskStatus{CommonStatus: CommonStatus{Phase: BackupPhasePending}}}
+func TestPolicyTaskMayFreezeExecutionSpecOnlyOnce(t *testing.T) {
+	oldTask := &BackupTask{Spec: BackupTaskSpec{ResourceIdentity: ResourceIdentity{ClusterRef: "c1"}, Trigger: BackupTriggerManual, Source: BackupTaskSource{Type: BackupTaskSourcePolicy, PolicyRef: &ObjectReference{Name: "policy"}}}, Status: BackupTaskStatus{CommonStatus: CommonStatus{Phase: BackupPhasePending}}}
 	newTask := oldTask.DeepCopy()
-	newTask.Spec.RepositoryRef = ObjectReference{Name: "repo"}
-	newTask.Spec.SelectionSnapshot = &BackupSelectionSpec{Mode: BackupSelectionModeNamespace, IncludeNamespaces: []string{"app"}}
+	newTask.Spec.BackupSpec = &BackupExecutionSpec{RepositoryRef: ObjectReference{Name: "repo"}, Selection: BackupSelectionSpec{Mode: BackupSelectionModeNamespace, IncludeNamespaces: []string{"app"}}, Timeout: metav1.Duration{Duration: time.Hour}}
+	newTask.Default()
+	newTask.Spec.BackupSpecHash = "frozen"
 	newTask.Spec.PolicyGeneration = 3
 	_, err := newTask.ValidateUpdate(oldTask)
 	require.NoError(t, err)
 	oldTask = newTask.DeepCopy()
 	oldTask.Status.Phase = BackupPhasePreparing
 	newTask = oldTask.DeepCopy()
-	newTask.Spec.SelectionSnapshot.IncludeNamespaces = []string{"other"}
+	newTask.Spec.BackupSpec.Selection.IncludeNamespaces = []string{"other"}
 	_, err = newTask.ValidateUpdate(oldTask)
 	require.ErrorContains(t, err, "immutable")
+}
+
+func TestOneTimeTaskOwnsExecutionSpecAndCannotReferencePolicy(t *testing.T) {
+	task := &BackupTask{Spec: BackupTaskSpec{
+		ResourceIdentity: ResourceIdentity{ClusterRef: "c1"},
+		Trigger:          BackupTriggerManual,
+		Source:           BackupTaskSource{Type: BackupTaskSourceOneTime},
+		BackupSpec: &BackupExecutionSpec{
+			RepositoryRef: ObjectReference{Name: "repo"},
+			Selection:     BackupSelectionSpec{Mode: BackupSelectionModeNamespace, IncludeNamespaces: []string{"app"}},
+		},
+	}}
+	task.Default()
+	_, err := task.ValidateCreate()
+	require.NoError(t, err)
+	task.Spec.Source.PolicyRef = &ObjectReference{Name: "policy"}
+	_, err = task.ValidateCreate()
+	require.ErrorContains(t, err, "cannot set policyRef")
+}
+
+func TestManualPolicyTaskCannotSpoofFrozenExecutionSpec(t *testing.T) {
+	task := &BackupTask{Spec: BackupTaskSpec{
+		ResourceIdentity: ResourceIdentity{ClusterRef: "c1"},
+		Trigger:          BackupTriggerManual,
+		Source:           BackupTaskSource{Type: BackupTaskSourcePolicy, PolicyRef: &ObjectReference{Name: "policy"}},
+		BackupSpec:       &BackupExecutionSpec{RepositoryRef: ObjectReference{Name: "other-repo"}, Selection: BackupSelectionSpec{Mode: BackupSelectionModeNamespace, IncludeNamespaces: []string{"other"}}},
+	}}
+	task.Default()
+	_, err := task.ValidateCreate()
+	require.ErrorContains(t, err, "controller resolve backupSpec")
 }
 
 func TestRestoreHighRiskRequiresConfirmation(t *testing.T) {

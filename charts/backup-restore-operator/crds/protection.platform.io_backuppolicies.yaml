@@ -34,13 +34,16 @@ spec:
       type: string
     - jsonPath: .status.nextScheduleTime
       name: Next
-      type: date
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
+        description: |-
+          Future timestamps are rendered as <invalid> by kubectl's date formatter, so
+          keep the RFC3339 value visible instead of treating it as an object age.
         properties:
           apiVersion:
             description: |-

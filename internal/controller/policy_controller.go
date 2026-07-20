@@ -128,7 +128,34 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, request ctrl.Request) 
 			}
 		}
 		when := metav1.NewTime(scheduledAt)
-		task := &protectionv1alpha1.BackupTask{ObjectMeta: metav1.ObjectMeta{Name: scheduler.DeterministicTaskName(object.Name, scheduledAt), Labels: map[string]string{protectionv1alpha1.LabelPolicyUID: string(object.UID), protectionv1alpha1.LabelScheduledAt: strconv.FormatInt(scheduledAt.Unix(), 10), protectionv1alpha1.LabelTrigger: protectionv1alpha1.BackupTriggerSchedule, protectionv1alpha1.LabelCluster: object.Spec.ClusterRef}}, Spec: protectionv1alpha1.BackupTaskSpec{ResourceIdentity: object.Spec.ResourceIdentity, Trigger: protectionv1alpha1.BackupTriggerSchedule, PolicyRef: protectionv1alpha1.ObjectReference{Name: object.Name, UID: string(object.UID)}, ScheduledAt: &when, RepositoryRef: object.Spec.RepositoryRef, SelectionSnapshot: object.Spec.Selection.DeepCopy(), PolicyGeneration: object.Generation, RepositoryGeneration: repository.Generation, Timeout: object.Spec.Timeout, RetryPolicy: object.Spec.RetryPolicy, FailurePolicy: "Continue", AllowPartialRecord: true, IdempotencyKey: scheduler.ScheduledKey(string(object.UID), scheduledAt)}}
+		backupSpec := policyExecutionSpec(object)
+		backupSpec.RepositoryRef.UID = string(repository.UID)
+		backupSpecHash, hashErr := backupExecutionSpecHash(backupSpec)
+		if hashErr != nil {
+			return ctrl.Result{}, hashErr
+		}
+		task := &protectionv1alpha1.BackupTask{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: scheduler.DeterministicTaskName(object.Name, scheduledAt),
+				Labels: map[string]string{
+					protectionv1alpha1.LabelPolicyUID:   string(object.UID),
+					protectionv1alpha1.LabelScheduledAt: strconv.FormatInt(scheduledAt.Unix(), 10),
+					protectionv1alpha1.LabelTrigger:     protectionv1alpha1.BackupTriggerSchedule,
+					protectionv1alpha1.LabelCluster:     object.Spec.ClusterRef,
+				},
+			},
+			Spec: protectionv1alpha1.BackupTaskSpec{
+				ResourceIdentity:     object.Spec.ResourceIdentity,
+				Trigger:              protectionv1alpha1.BackupTriggerSchedule,
+				Source:               protectionv1alpha1.BackupTaskSource{Type: protectionv1alpha1.BackupTaskSourcePolicy, PolicyRef: &protectionv1alpha1.ObjectReference{Name: object.Name, UID: string(object.UID)}},
+				ScheduledAt:          &when,
+				BackupSpec:           backupSpec,
+				BackupSpecHash:       backupSpecHash,
+				PolicyGeneration:     object.Generation,
+				RepositoryGeneration: repository.Generation,
+				IdempotencyKey:       scheduler.ScheduledKey(string(object.UID), scheduledAt),
+			},
+		}
 		createErr := r.Create(ctx, task)
 		if createErr != nil && !apierrors.IsAlreadyExists(createErr) {
 			return ctrl.Result{}, createErr
@@ -214,10 +241,10 @@ func appendLimitedSkipped(values []protectionv1alpha1.SkippedRun, when time.Time
 
 func (r *PolicyReconciler) taskToPolicy(_ context.Context, object client.Object) []reconcile.Request {
 	task, ok := object.(*protectionv1alpha1.BackupTask)
-	if !ok || task.Spec.PolicyRef.Name == "" {
+	if !ok || task.Spec.Source.PolicyRef == nil || task.Spec.Source.PolicyRef.Name == "" {
 		return nil
 	}
-	return []reconcile.Request{{NamespacedName: client.ObjectKey{Name: task.Spec.PolicyRef.Name}}}
+	return []reconcile.Request{{NamespacedName: client.ObjectKey{Name: task.Spec.Source.PolicyRef.Name}}}
 }
 
 func (r *PolicyReconciler) refreshSelectionPreview(ctx context.Context, object *protectionv1alpha1.BackupPolicy) error {

@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -103,12 +104,13 @@ func (r *BackupTaskReconciler) Reconcile(ctx context.Context, request ctrl.Reque
 	if object.Spec.CancelRequested && !committedBackup(object.Status.Phase) {
 		return r.cancel(ctx, object, object.Spec.CancelReason)
 	}
-	if timedOut(object.Status.StartedAt, object.Spec.Timeout, time.Now()) {
+	timeout := backupTaskTimeout(object)
+	if timedOut(object.Status.StartedAt, timeout, time.Now()) {
 		return r.fail(ctx, object, opererrors.New(opererrors.CodeInternal, "backup task timed out", false, nil))
 	}
-	if object.Status.StartedAt != nil && object.Spec.Timeout.Duration > 0 {
+	if object.Status.StartedAt != nil && timeout.Duration > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithDeadline(ctx, object.Status.StartedAt.Add(object.Spec.Timeout.Duration))
+		ctx, cancel = context.WithDeadline(ctx, object.Status.StartedAt.Add(timeout.Duration))
 		defer cancel()
 	}
 	if object.Status.Phase == "" {
@@ -147,9 +149,12 @@ func (r *BackupTaskReconciler) Reconcile(ctx context.Context, request ctrl.Reque
 }
 
 func (r *BackupTaskReconciler) validate(ctx context.Context, task *protectionv1alpha1.BackupTask) (ctrl.Result, error) {
-	if task.Spec.SelectionSnapshot == nil || task.Spec.RepositoryRef.Name == "" {
+	if task.Spec.BackupSpec == nil {
+		if task.Spec.Source.Type != protectionv1alpha1.BackupTaskSourcePolicy || task.Spec.Source.PolicyRef == nil {
+			return ctrl.Result{}, opererrors.New(opererrors.CodeSelectionInvalid, "backupSpec is required", false, nil)
+		}
 		policy := &protectionv1alpha1.BackupPolicy{}
-		if err := r.Get(ctx, client.ObjectKey{Name: task.Spec.PolicyRef.Name}, policy); err != nil {
+		if err := r.Get(ctx, client.ObjectKey{Name: task.Spec.Source.PolicyRef.Name}, policy); err != nil {
 			return ctrl.Result{}, opererrors.New(opererrors.CodeSelectionInvalid, "policy does not exist", false, err)
 		}
 		if policy.Spec.ClusterRef != task.Spec.ClusterRef {
@@ -160,21 +165,46 @@ func (r *BackupTaskReconciler) validate(ctx context.Context, task *protectionv1a
 			return ctrl.Result{}, err
 		}
 		before := task.DeepCopy()
-		task.Spec.PolicyRef.UID = string(policy.UID)
-		task.Spec.RepositoryRef = policy.Spec.RepositoryRef
-		task.Spec.RepositoryRef.UID = string(repository.UID)
-		task.Spec.SelectionSnapshot = policy.Spec.Selection.DeepCopy()
+		task.Spec.Source.PolicyRef.UID = string(policy.UID)
+		task.Spec.BackupSpec = policyExecutionSpec(policy)
+		task.Spec.BackupSpec.RepositoryRef.UID = string(repository.UID)
 		task.Spec.PolicyGeneration = policy.Generation
 		task.Spec.RepositoryGeneration = repository.Generation
-		task.Spec.Timeout = policy.Spec.Timeout
-		task.Spec.RetryPolicy = policy.Spec.RetryPolicy
+		hash, hashErr := backupExecutionSpecHash(task.Spec.BackupSpec)
+		if hashErr != nil {
+			return ctrl.Result{}, hashErr
+		}
+		task.Spec.BackupSpecHash = hash
 		if err = r.Patch(ctx, task, client.MergeFrom(before)); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
-	repository, err := getRepository(ctx, r.Client, task.Spec.RepositoryRef.Name)
+	if task.Spec.BackupSpec == nil {
+		return ctrl.Result{}, opererrors.New(opererrors.CodeSelectionInvalid, "backupSpec resolution failed", false, nil)
+	}
+	repository, err := getRepository(ctx, r.Client, task.Spec.BackupSpec.RepositoryRef.Name)
 	if err != nil {
 		return ctrl.Result{}, err
+	}
+	if task.Spec.BackupSpec.RepositoryRef.UID == "" || task.Spec.BackupSpecHash == "" {
+		before := task.DeepCopy()
+		task.Spec.BackupSpec.RepositoryRef.UID = string(repository.UID)
+		task.Spec.RepositoryGeneration = repository.Generation
+		hash, hashErr := backupExecutionSpecHash(task.Spec.BackupSpec)
+		if hashErr != nil {
+			return ctrl.Result{}, hashErr
+		}
+		task.Spec.BackupSpecHash = hash
+		if err = r.Patch(ctx, task, client.MergeFrom(before)); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	expectedHash, hashErr := backupExecutionSpecHash(task.Spec.BackupSpec)
+	if hashErr != nil {
+		return ctrl.Result{}, hashErr
+	}
+	if task.Spec.BackupSpecHash != expectedHash {
+		return ctrl.Result{}, opererrors.New(opererrors.CodeSelectionInvalid, "backupSpecHash does not match the frozen backupSpec", false, nil)
 	}
 	if repository.Status.Phase != protectionv1alpha1.RepositoryPhaseReady {
 		return ctrl.Result{}, opererrors.New(opererrors.CodeRepoConnect, "repository is not Ready", true, nil)
@@ -182,7 +212,7 @@ func (r *BackupTaskReconciler) validate(ctx context.Context, task *protectionv1a
 	if repository.Spec.ClusterRef != task.Spec.ClusterRef {
 		return ctrl.Result{}, opererrors.New(opererrors.CodePermissionDenied, "task references another cluster", false, nil)
 	}
-	if task.Spec.SelectionSnapshot.IncludeSecrets && !repository.Spec.Encryption.Enabled {
+	if task.Spec.BackupSpec.Selection.IncludeSecrets && !repository.Spec.Encryption.Enabled {
 		return ctrl.Result{}, opererrors.New(opererrors.CodePermissionDenied, "selections containing Secrets require repository encryption", false, nil)
 	}
 	return r.transition(ctx, task, protectionv1alpha1.BackupPhaseValidating, 5, "Validated", "references and permissions validated")
@@ -211,11 +241,11 @@ func (r *BackupTaskReconciler) collect(ctx context.Context, task *protectionv1al
 	if err = os.MkdirAll(payload, 0o700); err != nil {
 		return ctrl.Result{}, err
 	}
-	resources, _, err := r.Resolver.ResolveTypes(ctx, *task.Spec.SelectionSnapshot)
+	resources, _, err := r.Resolver.ResolveTypes(ctx, task.Spec.BackupSpec.Selection)
 	if err != nil {
 		return ctrl.Result{}, opererrors.New(opererrors.CodeBackupCollect, "resolve resource types", true, err)
 	}
-	collected, err := r.Collector.Collect(ctx, *task.Spec.SelectionSnapshot, resources, payload)
+	collected, err := r.Collector.Collect(ctx, task.Spec.BackupSpec.Selection, resources, payload)
 	if err != nil {
 		return ctrl.Result{}, opererrors.New(opererrors.CodeBackupCollect, "collect resources", true, err)
 	}
@@ -238,7 +268,7 @@ func (r *BackupTaskReconciler) preHooks(ctx context.Context, task *protectionv1a
 }
 
 func (r *BackupTaskReconciler) createSnapshots(ctx context.Context, task *protectionv1alpha1.BackupTask) (ctrl.Result, error) {
-	if task.Spec.SelectionSnapshot == nil || !task.Spec.SelectionSnapshot.PVC.Enabled || task.Status.Progress.TotalPVCs == 0 {
+	if task.Spec.BackupSpec == nil || !task.Spec.BackupSpec.Selection.PVC.Enabled || task.Status.Progress.TotalPVCs == 0 {
 		return r.transition(ctx, task, protectionv1alpha1.BackupPhaseCreatingSnapshots, 55, "SnapshotsSkipped", "PVC snapshots are disabled or no PVC was selected")
 	}
 	dir, err := taskDirectory(r.Workspace, string(task.UID))
@@ -256,17 +286,17 @@ func (r *BackupTaskReconciler) createSnapshots(ctx context.Context, task *protec
 		if entry.Kind != "PersistentVolumeClaim" {
 			continue
 		}
-		if !pvcNameSelected(task.Spec.SelectionSnapshot.PVC, entry.Namespace, entry.Name) {
+		if !pvcNameSelected(task.Spec.BackupSpec.Selection.PVC, entry.Namespace, entry.Name) {
 			continue
 		}
-		capability, detectErr := r.Snapshots.Detect(ctx, entry.Namespace, entry.Name, task.Spec.SelectionSnapshot.PVC.SnapshotClassName, task.Spec.SelectionSnapshot.PVC.SnapshotClassMapping)
+		capability, detectErr := r.Snapshots.Detect(ctx, entry.Namespace, entry.Name, task.Spec.BackupSpec.Selection.PVC.SnapshotClassName, task.Spec.BackupSpec.Selection.PVC.SnapshotClassMapping)
 		if detectErr != nil {
 			results = append(results, protectionv1alpha1.SnapshotResult{PVCNamespace: entry.Namespace, PVCName: entry.Name, Phase: "Failed", Error: detectErr.Error()})
 			failed++
 			continue
 		}
-		if task.Spec.SelectionSnapshot.PVC.LabelSelector != nil {
-			selector, selectorErr := metav1.LabelSelectorAsSelector(task.Spec.SelectionSnapshot.PVC.LabelSelector)
+		if task.Spec.BackupSpec.Selection.PVC.LabelSelector != nil {
+			selector, selectorErr := metav1.LabelSelectorAsSelector(task.Spec.BackupSpec.Selection.PVC.LabelSelector)
 			if selectorErr != nil {
 				return ctrl.Result{}, selectorErr
 			}
@@ -297,7 +327,7 @@ func (r *BackupTaskReconciler) createSnapshots(ctx context.Context, task *protec
 	if pending {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
-	if failed > 0 && task.Spec.SelectionSnapshot.PVC.FailurePolicy == "FailFast" {
+	if failed > 0 && (task.Spec.BackupSpec.Selection.PVC.FailurePolicy == "FailFast" || !task.Spec.BackupSpec.AllowPartialRecord) {
 		return ctrl.Result{}, opererrors.New(opererrors.CodeSnapshotCreate, fmt.Sprintf("%d PVC snapshots failed", failed), false, nil)
 	}
 	conditions.True(&task.Status.Conditions, task.Generation, protectionv1alpha1.ConditionSnapshotsReady, "SnapshotsProcessed", fmt.Sprintf("%d ready, %d failed", len(results)-int(failed), failed))
@@ -330,7 +360,7 @@ func (r *BackupTaskReconciler) packageBackup(ctx context.Context, task *protecti
 	if err != nil {
 		return ctrl.Result{}, opererrors.New(opererrors.CodeBackupPackage, "create deterministic archive", true, err)
 	}
-	repositoryCR, err := getRepository(ctx, r.Client, task.Spec.RepositoryRef.Name)
+	repositoryCR, err := getRepository(ctx, r.Client, task.Spec.BackupSpec.RepositoryRef.Name)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -383,7 +413,7 @@ func (r *BackupTaskReconciler) packageBackup(ctx context.Context, task *protecti
 }
 
 func (r *BackupTaskReconciler) upload(ctx context.Context, task *protectionv1alpha1.BackupTask) (ctrl.Result, error) {
-	repositoryCR, err := getRepository(ctx, r.Client, task.Spec.RepositoryRef.Name)
+	repositoryCR, err := getRepository(ctx, r.Client, task.Spec.BackupSpec.RepositoryRef.Name)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -441,7 +471,7 @@ func (r *BackupTaskReconciler) upload(ctx context.Context, task *protectionv1alp
 }
 
 func (r *BackupTaskReconciler) verify(ctx context.Context, task *protectionv1alpha1.BackupTask) (ctrl.Result, error) {
-	repositoryCR, err := getRepository(ctx, r.Client, task.Spec.RepositoryRef.Name)
+	repositoryCR, err := getRepository(ctx, r.Client, task.Spec.BackupSpec.RepositoryRef.Name)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -496,17 +526,12 @@ func (r *BackupTaskReconciler) generateRecord(ctx context.Context, task *protect
 	err := r.Get(ctx, client.ObjectKey{Name: recordName}, record)
 	if apierrors.IsNotFound(err) {
 		now := metav1.Now()
-		expires := metav1.NewTime(now.Add(30 * 24 * time.Hour))
-		policyRef := task.Spec.PolicyRef
-		policy := &protectionv1alpha1.BackupPolicy{}
-		if getErr := r.Get(ctx, client.ObjectKey{Name: policyRef.Name}, policy); getErr == nil && policy.Spec.Retention.MaxAgeDays > 0 {
-			expires = metav1.NewTime(now.Add(time.Duration(policy.Spec.Retention.MaxAgeDays) * 24 * time.Hour))
-		}
+		expires := metav1.NewTime(now.Add(time.Duration(task.Spec.BackupSpec.Retention.MaxAgeDays) * 24 * time.Hour))
 		content := "Complete"
 		if task.Status.Progress.FailedSnapshots > 0 || task.Status.Progress.FailedResources > 0 {
 			content = "Partial"
 		}
-		repositoryCR, getRepositoryErr := getRepository(ctx, r.Client, task.Spec.RepositoryRef.Name)
+		repositoryCR, getRepositoryErr := getRepository(ctx, r.Client, task.Spec.BackupSpec.RepositoryRef.Name)
 		if getRepositoryErr != nil {
 			return ctrl.Result{}, getRepositoryErr
 		}
@@ -515,7 +540,7 @@ func (r *BackupTaskReconciler) generateRecord(ctx context.Context, task *protect
 		if namespaceErr != nil {
 			return ctrl.Result{}, namespaceErr
 		}
-		source := protectionv1alpha1.BackupSource{ClusterRef: task.Spec.ClusterRef, ScopeMode: string(task.Spec.SelectionSnapshot.Mode), Namespaces: namespaces}
+		source := protectionv1alpha1.BackupSource{ClusterRef: task.Spec.ClusterRef, ScopeMode: string(task.Spec.BackupSpec.Selection.Mode), Namespaces: namespaces}
 		if serverVersion, versionErr := r.Resolver.Discovery.ServerVersion(); versionErr == nil {
 			source.KubernetesVersion = serverVersion.GitVersion
 		}
@@ -523,7 +548,41 @@ func (r *BackupTaskReconciler) generateRecord(ctx context.Context, task *protect
 		if getErr := r.Get(ctx, client.ObjectKey{Name: "kube-system"}, clusterNamespace); getErr == nil {
 			source.ClusterUID = string(clusterNamespace.UID)
 		}
-		record = &protectionv1alpha1.BackupRecord{ObjectMeta: metav1.ObjectMeta{Name: recordName, Labels: map[string]string{protectionv1alpha1.LabelTaskUID: string(task.UID), protectionv1alpha1.LabelPolicyUID: policyRef.UID, protectionv1alpha1.LabelCluster: task.Spec.ClusterRef}}, Spec: protectionv1alpha1.BackupRecordSpec{ResourceIdentity: task.Spec.ResourceIdentity, BackupID: string(task.UID), SourceTaskRef: protectionv1alpha1.ObjectReference{Name: task.Name, UID: string(task.UID)}, PolicyRef: policyRef, RepositoryRef: task.Spec.RepositoryRef, Source: source, BackupPath: backupRemotePath(task), Checksum: task.Status.ArchiveChecksum, ChecksumAlgorithm: "SHA-256", FormatVersion: backupFormatVersion, OperatorVersion: r.Version, Encryption: encryptionSpec, Inventory: protectionv1alpha1.BackupInventory{ResourceCount: task.Status.Progress.SucceededResources, NamespaceCount: int64(len(namespaces)), PVCCount: task.Status.Progress.TotalPVCs, SnapshotCount: task.Status.Progress.SucceededSnapshots, FailedResourceCount: task.Status.Progress.FailedResources, FailedSnapshotCount: task.Status.Progress.FailedSnapshots, BackupBytes: task.Status.BackupBytes}, Snapshots: task.Status.Snapshots, ContentCompleteness: content, SnapshotLifecycle: task.Spec.SelectionSnapshot.PVC.Lifecycle, ExpiresAt: &expires}}
+		labels := map[string]string{
+			protectionv1alpha1.LabelTaskUID: string(task.UID),
+			protectionv1alpha1.LabelCluster: task.Spec.ClusterRef,
+		}
+		var policyRef *protectionv1alpha1.ObjectReference
+		if task.Spec.Source.PolicyRef != nil {
+			copy := *task.Spec.Source.PolicyRef
+			policyRef = &copy
+			labels[protectionv1alpha1.LabelPolicyUID] = copy.UID
+		}
+		record = &protectionv1alpha1.BackupRecord{
+			ObjectMeta: metav1.ObjectMeta{Name: recordName, Labels: labels},
+			Spec: protectionv1alpha1.BackupRecordSpec{
+				ResourceIdentity:    task.Spec.ResourceIdentity,
+				BackupID:            string(task.UID),
+				SourceTaskRef:       protectionv1alpha1.ObjectReference{Name: task.Name, UID: string(task.UID)},
+				SourceType:          task.Spec.Source.Type,
+				PolicyRef:           policyRef,
+				BackupSpec:          *task.Spec.BackupSpec.DeepCopy(),
+				BackupSpecHash:      task.Spec.BackupSpecHash,
+				RepositoryRef:       task.Spec.BackupSpec.RepositoryRef,
+				Source:              source,
+				BackupPath:          backupRemotePath(task),
+				Checksum:            task.Status.ArchiveChecksum,
+				ChecksumAlgorithm:   "SHA-256",
+				FormatVersion:       backupFormatVersion,
+				OperatorVersion:     r.Version,
+				Encryption:          encryptionSpec,
+				Inventory:           protectionv1alpha1.BackupInventory{ResourceCount: task.Status.Progress.SucceededResources, NamespaceCount: int64(len(namespaces)), PVCCount: task.Status.Progress.TotalPVCs, SnapshotCount: task.Status.Progress.SucceededSnapshots, FailedResourceCount: task.Status.Progress.FailedResources, FailedSnapshotCount: task.Status.Progress.FailedSnapshots, BackupBytes: task.Status.BackupBytes},
+				Snapshots:           task.Status.Snapshots,
+				ContentCompleteness: content,
+				SnapshotLifecycle:   task.Spec.BackupSpec.Selection.PVC.Lifecycle,
+				ExpiresAt:           &expires,
+			},
+		}
 		if err = r.Create(ctx, record); err != nil && !apierrors.IsAlreadyExists(err) {
 			return ctrl.Result{}, err
 		}
@@ -603,12 +662,13 @@ func (r *BackupTaskReconciler) fail(ctx context.Context, task *protectionv1alpha
 	if len(task.Status.Errors) > 50 {
 		task.Status.Errors = task.Status.Errors[len(task.Status.Errors)-50:]
 	}
-	if opererrors.Retryable(err) && task.Status.Attempt < task.Spec.RetryPolicy.MaxAttempts {
+	retryPolicy := backupTaskRetryPolicy(task)
+	if opererrors.Retryable(err) && task.Status.Attempt < retryPolicy.MaxAttempts {
 		if patchErr := statusPatch(ctx, r.Client, task, before); patchErr != nil {
 			return ctrl.Result{}, patchErr
 		}
-		delay := task.Spec.RetryPolicy.Backoff.Duration * time.Duration(1<<min32(task.Status.Attempt-1, 6))
-		if max := task.Spec.RetryPolicy.MaxBackoff.Duration; max > 0 && delay > max {
+		delay := retryPolicy.Backoff.Duration * time.Duration(1<<min32(task.Status.Attempt-1, 6))
+		if max := retryPolicy.MaxBackoff.Duration; max > 0 && delay > max {
 			delay = max
 		}
 		return ctrl.Result{RequeueAfter: delay}, nil
@@ -673,11 +733,11 @@ func pvcNameSelected(spec protectionv1alpha1.PVCSelectionSpec, namespace, name s
 }
 
 func (r *BackupTaskReconciler) sourceNamespaces(task *protectionv1alpha1.BackupTask) ([]string, error) {
-	if task.Spec.SelectionSnapshot == nil {
+	if task.Spec.BackupSpec == nil {
 		return nil, fmt.Errorf("selection snapshot is missing")
 	}
-	if task.Spec.SelectionSnapshot.Mode == protectionv1alpha1.BackupSelectionModeNamespace {
-		return collector.IncludedNamespaces(*task.Spec.SelectionSnapshot), nil
+	if task.Spec.BackupSpec.Selection.Mode == protectionv1alpha1.BackupSelectionModeNamespace {
+		return collector.IncludedNamespaces(task.Spec.BackupSpec.Selection), nil
 	}
 	dir, err := taskDirectory(r.Workspace, string(task.UID))
 	if err != nil {
@@ -732,6 +792,45 @@ func min32(a, b int32) int32 {
 		return a
 	}
 	return b
+}
+
+func policyExecutionSpec(policy *protectionv1alpha1.BackupPolicy) *protectionv1alpha1.BackupExecutionSpec {
+	return &protectionv1alpha1.BackupExecutionSpec{
+		RepositoryRef:      policy.Spec.RepositoryRef,
+		Selection:          *policy.Spec.Selection.DeepCopy(),
+		Retention:          policy.Spec.Retention,
+		Timeout:            policy.Spec.Timeout,
+		RetryPolicy:        policy.Spec.RetryPolicy,
+		FailurePolicy:      "Continue",
+		AllowPartialRecord: true,
+	}
+}
+
+func backupExecutionSpecHash(spec *protectionv1alpha1.BackupExecutionSpec) (string, error) {
+	payload, err := json.Marshal(spec)
+	if err != nil {
+		return "", fmt.Errorf("marshal backup execution spec: %w", err)
+	}
+	sum := sha256.Sum256(payload)
+	return fmt.Sprintf("%x", sum[:]), nil
+}
+
+func backupTaskTimeout(task *protectionv1alpha1.BackupTask) metav1.Duration {
+	if task.Spec.BackupSpec != nil && task.Spec.BackupSpec.Timeout.Duration > 0 {
+		return task.Spec.BackupSpec.Timeout
+	}
+	return metav1.Duration{Duration: 4 * time.Hour}
+}
+
+func backupTaskRetryPolicy(task *protectionv1alpha1.BackupTask) protectionv1alpha1.RetryPolicy {
+	if task.Spec.BackupSpec != nil {
+		return task.Spec.BackupSpec.RetryPolicy
+	}
+	return protectionv1alpha1.RetryPolicy{
+		MaxAttempts: 3,
+		Backoff:     metav1.Duration{Duration: 30 * time.Second},
+		MaxBackoff:  metav1.Duration{Duration: 10 * time.Minute},
+	}
 }
 
 func (r *BackupTaskReconciler) SetupWithManager(manager ctrl.Manager) error {

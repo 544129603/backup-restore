@@ -58,8 +58,26 @@ func (r *BackupRecordReconciler) Reconcile(ctx context.Context, request ctrl.Req
 		}
 	}
 	if object.Spec.ExpiresAt != nil && time.Now().After(object.Spec.ExpiresAt.Time) {
+		if object.Spec.SourceType == protectionv1alpha1.BackupTaskSourceOneTime && object.Annotations[protectionv1alpha1.AnnotationProtected] != "true" {
+			before := object.DeepCopy()
+			if object.Annotations == nil {
+				object.Annotations = map[string]string{}
+			}
+			object.Annotations[protectionv1alpha1.AnnotationDeleteMode] = protectionv1alpha1.DeleteModeRepositoryData
+			if object.Spec.BackupSpec.Retention.DeleteSnapshots {
+				object.Annotations[protectionv1alpha1.AnnotationDeleteMode] = protectionv1alpha1.DeleteModeRepositoryDataAndSnapshots
+			}
+			object.Annotations[protectionv1alpha1.AnnotationDeleteConfirmed] = "true"
+			if err := r.Patch(ctx, object, client.MergeFrom(before)); err != nil {
+				return ctrl.Result{}, err
+			}
+			if err := r.Delete(ctx, object); err != nil {
+				return ctrl.Result{}, client.IgnoreNotFound(err)
+			}
+			return ctrl.Result{}, nil
+		}
 		before := object.DeepCopy()
-		object.Status.ObservedGeneration, object.Status.Phase, object.Status.Restorable, object.Status.Reason, object.Status.Message = object.Generation, protectionv1alpha1.RecordPhaseExpired, false, "RetentionExpired", "backup record exceeded its retention deadline"
+		object.Status.ObservedGeneration, object.Status.Phase, object.Status.Restorable, object.Status.Protected, object.Status.Reason, object.Status.Message = object.Generation, protectionv1alpha1.RecordPhaseExpired, false, object.Annotations[protectionv1alpha1.AnnotationProtected] == "true", "RetentionExpired", "backup record exceeded its retention deadline"
 		conditions.False(&object.Status.Conditions, object.Generation, protectionv1alpha1.ConditionReady, "RetentionExpired", object.Status.Message)
 		return ctrl.Result{RequeueAfter: time.Hour}, statusPatch(ctx, r.Client, object, before)
 	}
@@ -69,6 +87,7 @@ func (r *BackupRecordReconciler) Reconcile(ctx context.Context, request ctrl.Req
 func (r *BackupRecordReconciler) verify(ctx context.Context, record *protectionv1alpha1.BackupRecord) (ctrl.Result, error) {
 	before := record.DeepCopy()
 	record.Status.ObservedGeneration, record.Status.Phase, record.Status.Restorable = record.Generation, protectionv1alpha1.RecordPhaseVerifying, false
+	record.Status.Protected = record.Annotations[protectionv1alpha1.AnnotationProtected] == "true"
 	conditions.Unknown(&record.Status.Conditions, record.Generation, protectionv1alpha1.ConditionVerified, "Verifying", "verifying repository package")
 	repositoryCR, err := getRepository(ctx, r.Client, record.Spec.RepositoryRef.Name)
 	if err != nil {

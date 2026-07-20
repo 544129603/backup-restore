@@ -24,6 +24,28 @@ func defaultRetryPolicy(p *RetryPolicy) {
 	p.MaxBackoff = durationOr(p.MaxBackoff, 10*time.Minute)
 }
 
+func defaultRetention(retention *RetentionSpec) {
+	if retention.MaxCopies == 0 {
+		retention.MaxCopies = 7
+	}
+	if retention.MinCopies == 0 {
+		retention.MinCopies = 1
+	}
+	if retention.MaxAgeDays == 0 {
+		retention.MaxAgeDays = 30
+	}
+}
+
+func defaultBackupExecution(spec *BackupExecutionSpec) {
+	defaultSelection(&spec.Selection)
+	defaultRetention(&spec.Retention)
+	spec.Timeout = durationOr(spec.Timeout, 4*time.Hour)
+	defaultRetryPolicy(&spec.RetryPolicy)
+	if spec.FailurePolicy == "" {
+		spec.FailurePolicy = "Continue"
+	}
+}
+
 // +kubebuilder:webhook:path=/mutate-protection-platform-io-v1alpha1-backuprepository,mutating=true,failurePolicy=fail,sideEffects=None,groups=protection.platform.io,resources=backuprepositories,verbs=create;update,versions=v1alpha1,name=mbackuprepository.protection.platform.io,admissionReviewVersions=v1
 func (r *BackupRepository) Default() {
 	r.Spec.HealthCheckInterval = durationOr(r.Spec.HealthCheckInterval, 30*time.Minute)
@@ -82,15 +104,7 @@ func (p *BackupPolicy) Default() {
 	if p.Spec.MaxCatchUpRuns == 0 {
 		p.Spec.MaxCatchUpRuns = 1
 	}
-	if p.Spec.Retention.MaxCopies == 0 {
-		p.Spec.Retention.MaxCopies = 7
-	}
-	if p.Spec.Retention.MinCopies == 0 {
-		p.Spec.Retention.MinCopies = 1
-	}
-	if p.Spec.Retention.MaxAgeDays == 0 {
-		p.Spec.Retention.MaxAgeDays = 30
-	}
+	defaultRetention(&p.Spec.Retention)
 	defaultRetryPolicy(&p.Spec.RetryPolicy)
 	p.Spec.Timeout = durationOr(p.Spec.Timeout, 4*time.Hour)
 }
@@ -100,13 +114,18 @@ func (t *BackupTask) Default() {
 	if t.Spec.Trigger == "" {
 		t.Spec.Trigger = BackupTriggerManual
 	}
-	if t.Spec.FailurePolicy == "" {
-		t.Spec.FailurePolicy = "Continue"
+	if t.Spec.Source.Type == "" {
+		if t.Spec.Source.PolicyRef != nil {
+			t.Spec.Source.Type = BackupTaskSourcePolicy
+		} else if t.Spec.BackupSpec != nil {
+			t.Spec.Source.Type = BackupTaskSourceOneTime
+		}
 	}
-	t.Spec.Timeout = durationOr(t.Spec.Timeout, 4*time.Hour)
-	defaultRetryPolicy(&t.Spec.RetryPolicy)
-	if t.Spec.SelectionSnapshot != nil {
-		defaultSelection(t.Spec.SelectionSnapshot)
+	if t.Spec.BackupSpec != nil {
+		if t.Spec.Source.Type == BackupTaskSourceOneTime && t.Spec.BackupSpec.Retention.MaxCopies == 0 {
+			t.Spec.BackupSpec.Retention.MaxCopies = 1
+		}
+		defaultBackupExecution(t.Spec.BackupSpec)
 	}
 }
 

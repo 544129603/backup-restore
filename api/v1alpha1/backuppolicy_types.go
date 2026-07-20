@@ -91,7 +91,9 @@ type BackupPolicyStatus struct {
 // +kubebuilder:printcolumn:name="Mode",type=string,JSONPath=`.spec.selection.mode`
 // +kubebuilder:printcolumn:name="Enabled",type=boolean,JSONPath=`.spec.enabled`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
-// +kubebuilder:printcolumn:name="Next",type=date,JSONPath=`.status.nextScheduleTime`
+// Future timestamps are rendered as <invalid> by kubectl's date formatter, so
+// keep the RFC3339 value visible instead of treating it as an object age.
+// +kubebuilder:printcolumn:name="Next",type=string,JSONPath=`.status.nextScheduleTime`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type BackupPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
