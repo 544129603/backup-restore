@@ -61,7 +61,7 @@ const resourceDefinitions = {
     title: "执行历史", singular: "备份任务", kind: "BackupTask", creatable: true, editable: false,
     columns: [
       ["触发方式", o => path(o, "spec.trigger", "Manual")],
-      ["来源策略", o => escapeHTML(path(o, "spec.policyRef.name", "—"))],
+      ["备份来源", o => path(o, "spec.source.type", "OneTime") === "Policy" ? escapeHTML(path(o, "spec.source.policyRef.name", "—")) : '<span class="yes-text">一次性备份</span>'],
       ["状态", o => statusChip(path(o, "status.phase", "Pending"))],
       ["恢复点", o => taskRecordCell(o)],
       ["进度", o => progressCell(path(o, "status.progress.percent", 0))],
@@ -69,16 +69,28 @@ const resourceDefinitions = {
       ["开始时间", o => formatDate(path(o, "status.startedAt", path(o, "metadata.creationTimestamp", null)))],
     ],
     actions: o => [action("view", "详情"), ...(!terminalPhases.has(path(o, "status.phase", "")) ? [action("cancel", "取消", "danger")] : []), action("delete", "删除", "danger")],
-    template: refs => baseObject("BackupTask", `manual-${compactTimestamp()}`, {
-      clusterRef: state.clusterRef, trigger: "Manual", policyRef: {name: refs.policy || "daily-backup"}, timeout: "4h",
-      retryPolicy: {maxAttempts: 3, backoff: "30s", maxBackoff: "10m"},
-      failurePolicy: "Continue", allowPartialRecord: true, idempotencyKey: `webui/manual/${Date.now()}`,
+    template: refs => baseObject("BackupTask", `onetime-${compactTimestamp()}`, {
+      clusterRef: state.clusterRef, trigger: "Manual", source: {type: "OneTime"},
+      backupSpec: {
+        repositoryRef: {name: refs.repository || "local-repository"},
+        selection: {
+          mode: "Namespace", includeNamespaces: ["default"], excludeNamespaces: [],
+          resources: {include: ["configmaps", "services", "deployments.apps"], exclude: ["events", "pods"]},
+          includeClusterResources: false, includeSecrets: false, includeCRDs: false, includeCustomResources: true,
+          pvc: {enabled: false, snapshotTimeout: "10m", failurePolicy: "ContinueAndMarkPartial", lifecycle: "RetainAfterRecordDeletion"},
+          consistencyMode: "CrashConsistent",
+        },
+        retention: {maxCopies: 1, minCopies: 1, maxAgeDays: 30, deleteSnapshots: false},
+        timeout: "4h", retryPolicy: {maxAttempts: 3, backoff: "30s", maxBackoff: "10m"},
+        failurePolicy: "Continue", allowPartialRecord: true,
+      },
+      idempotencyKey: `webui/onetime/${Date.now()}`,
     }),
   },
   records: {
     title: "恢复点", singular: "恢复点", kind: "BackupRecord", creatable: false, editable: false,
     columns: [
-      ["来源", o => `${escapeHTML(path(o, "spec.policyRef.name", "—"))}<span class="object-sub">任务 ${escapeHTML(path(o, "spec.sourceTaskRef.name", "—"))}</span>`],
+      ["来源", o => `${path(o, "spec.sourceType", "OneTime") === "Policy" ? escapeHTML(path(o, "spec.policyRef.name", "—")) : "一次性备份"}<span class="object-sub">任务 ${escapeHTML(path(o, "spec.sourceTaskRef.name", "—"))}</span>`],
       ["可用性", o => statusChip(path(o, "status.phase", "Pending"))],
       ["可恢复", o => path(o, "status.restorable", false) ? `<span class="yes-text">是</span>` : "否"],
       ["资源 / PVC", o => `${path(o, "spec.inventory.resourceCount", 0)} / ${path(o, "spec.inventory.pvcCount", 0)}`],
@@ -366,7 +378,7 @@ async function loadPolicyRelations() {
   const relations = {};
   const ensure = name => relations[name] ||= {tasks: [], records: [], recordByTask: {}};
   (tasks.items || []).forEach(task => {
-    const policyName = path(task, "spec.policyRef.name", "");
+    const policyName = path(task, "spec.source.policyRef.name", "");
     if (policyName) ensure(policyName).tasks.push(task);
   });
   (records.items || []).forEach(record => {
@@ -613,7 +625,8 @@ function renderSelectionSection(selection, title, description) {
 
 function renderBackupTaskDetail(object) {
   const progress = path(object, "status.progress", {});
-  const selection = path(object, "spec.selectionSnapshot", null);
+  const selection = path(object, "spec.backupSpec.selection", null);
+  const sourceType = path(object, "spec.source.type", "OneTime");
   return [
     detailSection("执行进度", "单次备份任务的实时处理量和数据吞吐", `${detailMetrics([
       ["总体进度", `${path(progress, "percent", 0)}%`], ["资源总数", path(progress, "totalResources", 0)],
@@ -621,12 +634,14 @@ function renderBackupTaskDetail(object) {
       ["PVC 总数", path(progress, "totalPVCs", 0)], ["成功快照", path(progress, "succeededSnapshots", 0)],
       ["已处理数据", formatBytes(path(progress, "bytesProcessed", 0))], ["已上传数据", formatBytes(path(progress, "bytesUploaded", 0))],
     ])}${detailProgress(path(progress, "percent", 0), path(object, "status.step", "等待执行"))}`, {full: true}),
-    detailSection("来源与执行环境", "该任务解析自哪个策略，并由哪个工作节点执行", detailList([
-      detailRow("来源策略", detailObjectLink("policies", path(object, "spec.policyRef.name", "")), true),
-      detailRow("备份仓库", detailObjectLink("repositories", path(object, "spec.repositoryRef.name", "")), true),
+    detailSection("来源与执行环境", "任务来源、冻结配置和实际执行位置", detailList([
+      detailRow("任务类型", sourceType === "Policy" ? "策略执行" : "一次性备份"),
+      ...(sourceType === "Policy" ? [detailRow("来源策略", detailObjectLink("policies", path(object, "spec.source.policyRef.name", "")), true)] : []),
+      detailRow("备份仓库", detailObjectLink("repositories", path(object, "spec.backupSpec.repositoryRef.name", "")), true),
       detailRow("触发方式", path(object, "spec.trigger", "Manual")),
       detailRow("计划时间", formatDate(path(object, "spec.scheduledAt", null))),
       detailRow("策略版本", path(object, "spec.policyGeneration", "—")),
+      detailRow("配置哈希", `<code>${escapeHTML(shortHash(path(object, "spec.backupSpecHash", "—")))}</code>`, true),
       detailRow("执行 Worker", path(object, "status.workerName", "—")),
       detailRow("执行节点", path(object, "status.executionNode", "—")),
       detailRow("最近心跳", formatDate(path(object, "status.lastHeartbeatTime", null))),
@@ -639,9 +654,9 @@ function renderBackupTaskDetail(object) {
       detailRow("恢复点", detailObjectLink("records", path(object, "status.recordRef.name", "")), true),
       detailRow("告警数量", `${path(object, "status.warnings", 0)} 个`),
       detailRow("执行尝试", `${path(object, "status.attempt", 0)} 次`),
-      detailRow("允许部分恢复点", detailToggle(path(object, "spec.allowPartialRecord", false), "允许", "不允许"), true),
+      detailRow("允许部分恢复点", detailToggle(path(object, "spec.backupSpec.allowPartialRecord", false), "允许", "不允许"), true),
     ])),
-    selection ? renderSelectionSection(selection, "执行范围快照", "任务创建时固化的选择规则，后续策略修改不会影响本次执行") : detailSection("执行范围快照", "任务完成解析后会固化策略范围", '<div class="detail-empty">当前任务尚未解析并固化策略选择范围。</div>', {full: true}),
+    selection ? renderSelectionSection(selection, "冻结的执行范围", "任务创建或解析时固化，后续策略修改不会影响本次执行") : detailSection("冻结的执行范围", "策略任务进入执行前会固化完整配置", '<div class="detail-empty">当前任务尚未解析策略配置。</div>', {full: true}),
     renderCheckpointSection(path(object, "status.checkpoints", [])),
     renderSnapshotSection(path(object, "status.snapshots", [])),
     renderErrorSection(path(object, "status.errors", [])),
@@ -657,8 +672,9 @@ function renderRecordDetail(object) {
       ["失败资源", path(inventory, "failedResourceCount", 0)], ["失败快照", path(inventory, "failedSnapshotCount", 0)],
       ["备份大小", formatBytes(path(inventory, "backupBytes", 0))], ["完整性", path(object, "spec.contentCompleteness", "Unknown")],
     ]), {full: true}),
-    detailSection("来源链路", "恢复点来自哪个策略、执行任务和仓库", detailList([
-      detailRow("来源策略", detailObjectLink("policies", path(object, "spec.policyRef.name", "")), true),
+    detailSection("来源链路", "恢复点的创建方式、执行任务和仓库", detailList([
+      detailRow("来源类型", path(object, "spec.sourceType", "OneTime") === "Policy" ? "备份策略" : "一次性备份"),
+      ...(path(object, "spec.sourceType", "OneTime") === "Policy" ? [detailRow("来源策略", detailObjectLink("policies", path(object, "spec.policyRef.name", "")), true)] : []),
       detailRow("执行任务", detailObjectLink("backup-tasks", path(object, "spec.sourceTaskRef.name", "")), true),
       detailRow("备份仓库", detailObjectLink("repositories", path(object, "spec.repositoryRef.name", "")), true),
       detailRow("来源集群", path(object, "spec.source.clusterRef", "—")),
@@ -672,6 +688,7 @@ function renderRecordDetail(object) {
       detailRow("校验算法", path(object, "spec.checksumAlgorithm", "—")),
       detailRow("校验和", `<code>${escapeHTML(shortHash(path(object, "spec.checksum", "—")))}</code>`, true),
       detailRow("格式版本", path(object, "spec.formatVersion", "—")),
+      detailRow("配置哈希", `<code>${escapeHTML(shortHash(path(object, "spec.backupSpecHash", "—")))}</code>`, true),
       detailRow("加密", detailToggle(path(object, "spec.encryption.enabled", false), path(object, "spec.encryption.algorithm", "已加密"), "未加密"), true),
       detailRow("已验证文件", `${path(object, "status.verifiedFiles", 0)} 个`),
       detailRow("最近校验", formatDate(path(object, "status.lastVerifiedAt", null))),
@@ -903,23 +920,25 @@ async function renderDetailLineage(resource, object, detailKey) {
       policyName ? api(`${API_BASE}/policies/${encodeURIComponent(policyName)}`).catch(() => null) : null,
       taskName ? api(`${API_BASE}/backup-tasks/${encodeURIComponent(taskName)}`).catch(() => null) : null,
     ]);
-    commit(`<div class="lineage-header"><div><strong>完整备份与恢复链</strong><span>从保护策略追溯到本次恢复执行</span></div></div><div class="lineage-chain four">
-      ${relationNode("policies", policy, "备份策略", path(policy, "status.phase", "Unknown"))}<span class="lineage-arrow">→</span>
+    const sourceNode = policy ? relationNode("policies", policy, "备份策略", path(policy, "status.phase", "Unknown")) : '<div class="lineage-node"><span>备份来源</span><strong>一次性备份</strong><small>任务内联完整执行配置</small></div>';
+    commit(`<div class="lineage-header"><div><strong>完整备份与恢复链</strong><span>从备份来源追溯到本次恢复执行</span></div></div><div class="lineage-chain four">
+      ${sourceNode}<span class="lineage-arrow">→</span>
       ${relationNode("backup-tasks", task, "备份任务", path(task, "status.phase", "Unknown"))}<span class="lineage-arrow">→</span>
       ${relationNode("records", record, "恢复点", path(record, "status.phase", "Unknown"))}<span class="lineage-arrow">→</span>
       ${relationNode("restore-tasks", object, "恢复任务", path(object, "status.phase", "Unknown"))}
     </div>`);
     return;
   }
-  const policyName = path(object, "spec.policyRef.name", "");
+  const policyName = resource === "backup-tasks" ? path(object, "spec.source.policyRef.name", "") : path(object, "spec.policyRef.name", "");
   const taskName = resource === "backup-tasks" ? object.metadata.name : path(object, "spec.sourceTaskRef.name", "");
   const recordName = resource === "records" ? object.metadata.name : path(object, "status.recordRef.name", "");
   const policy = policyName ? await api(`${API_BASE}/policies/${encodeURIComponent(policyName)}`).catch(() => null) : null;
   const task = resource === "backup-tasks" ? object : taskName ? await api(`${API_BASE}/backup-tasks/${encodeURIComponent(taskName)}`).catch(() => null) : null;
   const record = resource === "records" ? object : recordName ? await api(`${API_BASE}/records/${encodeURIComponent(recordName)}`).catch(() => null) : null;
   const missingRecord = task && !record && terminalPhases.has(path(task, "status.phase", ""));
-  commit(`<div class="lineage-header"><div><strong>备份来源链</strong><span>策略决定范围，任务记录执行，恢复点决定是否可恢复</span></div></div><div class="lineage-chain">
-    ${relationNode("policies", policy, "备份策略", path(policy, "status.phase", "Unknown"))}
+  const sourceNode = policy ? relationNode("policies", policy, "备份策略", path(policy, "status.phase", "Unknown")) : '<div class="lineage-node"><span>备份来源</span><strong>一次性备份</strong><small>任务自身定义备份范围</small></div>';
+  commit(`<div class="lineage-header"><div><strong>备份来源链</strong><span>来源定义范围，任务记录执行，恢复点决定是否可恢复</span></div></div><div class="lineage-chain">
+    ${sourceNode}
     <span class="lineage-arrow">→</span>
     ${relationNode("backup-tasks", task, "执行任务", path(task, "status.phase", "Unknown"))}
     <span class="lineage-arrow">→</span>
@@ -1062,7 +1081,9 @@ function policyScheduleCell(policy) {
 }
 
 function taskRecordCell(task) {
-  const policyName = path(task, "spec.policyRef.name", "");
+  const recordName = path(task, "status.recordRef.name", "");
+  if (recordName) return `<span class="yes-text">已生成</span><span class="object-sub">${escapeHTML(recordName)}</span>`;
+  const policyName = path(task, "spec.source.policyRef.name", "");
   const relation = state.policyRelations[policyName] || {};
   const record = relation.recordByTask?.[path(task, "metadata.name", "")];
   if (record) return `${statusChip(path(record, "status.phase", "Pending"))}<span class="object-sub">${escapeHTML(path(record, "metadata.name", "—"))}</span>`;

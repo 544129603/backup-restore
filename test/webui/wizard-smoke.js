@@ -19,9 +19,15 @@ assert(policyHTML.includes("保护范围") && policyHTML.includes("PVC 快照"),
 assert(validateWizardDraft(wizardState.draft).length === 0, "default merged policy must pass wizard validation");
 
 wizardState.resource = "backup-tasks";
-wizardState.draft = resourceDefinitions["backup-tasks"].template({policy: "daily-backup"});
-assert(path(wizardState.draft, "spec.policyRef.name") === "daily-backup", "manual task must reference a policy");
-assert(!path(wizardState.draft, "spec.repositoryRef") && !path(wizardState.draft, "spec.scopeRef"), "manual task must inherit repository and selection from policy");
+wizardState.context = {repositories: [{metadata: {name: "local-repository"}}], policies: [{metadata: {name: "daily-backup"}}]};
+wizardState.draft = resourceDefinitions["backup-tasks"].template({repository: "local-repository"});
+assert(path(wizardState.draft, "spec.source.type") === "OneTime", "manual task must default to a one-time backup");
+assert(path(wizardState.draft, "spec.backupSpec.repositoryRef.name") === "local-repository", "one-time task must own repository configuration");
+assert(path(wizardState.draft, "spec.backupSpec.selection.mode") === "Namespace", "one-time task must own its selection");
+setObjectPath(wizardState.draft, "spec.source.type", "Policy");
+wizardState.draft = normalizeDraft(wizardState.draft);
+assert(path(wizardState.draft, "spec.source.policyRef.name") === "daily-backup", "policy task must reference a policy");
+assert(!path(wizardState.draft, "spec.backupSpec"), "policy task must let the controller freeze the policy configuration");
 
 wizardState.resource = "restore-tasks";
 wizardState.draft = restoreTemplate("backup-record", []);
@@ -44,14 +50,14 @@ assert(policyDetailHTML.includes("local-repository") && policyDetailHTML.include
 
 const taskDetailHTML = renderObjectDetail("backup-tasks", {
   metadata: {...detailMetadata, name: "run-1"},
-  spec: {policyRef: {name: "daily-backup"}, repositoryRef: {name: "local-repository"}, trigger: "Manual", selectionSnapshot: detailPolicy.spec.selection},
+  spec: {source: {type: "Policy", policyRef: {name: "daily-backup"}}, backupSpec: {repositoryRef: {name: "local-repository"}, selection: detailPolicy.spec.selection, allowPartialRecord: true}, trigger: "Manual", backupSpecHash: "abcdef123456"},
   status: {phase: "Completed", step: "GeneratingRecord", progress: {percent: 100, totalResources: 8, processedResources: 8}, recordRef: {name: "point-1"}, checkpoints: [{step: "Upload", key: "archive", completed: true}]},
 });
-assert(taskDetailHTML.includes("执行进度") && taskDetailHTML.includes("执行范围快照") && taskDetailHTML.includes("point-1"), "backup task detail must expose progress, frozen selection and record output");
+assert(taskDetailHTML.includes("执行进度") && taskDetailHTML.includes("冻结的执行范围") && taskDetailHTML.includes("point-1"), "backup task detail must expose progress, frozen selection and record output");
 
 const recordDetailHTML = renderObjectDetail("records", {
   metadata: {...detailMetadata, name: "point-1"},
-  spec: {policyRef: {name: "daily-backup"}, sourceTaskRef: {name: "run-1"}, repositoryRef: {name: "local-repository"}, source: {clusterRef: "docker-desktop", namespaces: ["default"]}, inventory: {resourceCount: 8, pvcCount: 1, backupBytes: 1024}, snapshots: []},
+  spec: {sourceType: "Policy", policyRef: {name: "daily-backup"}, sourceTaskRef: {name: "run-1"}, repositoryRef: {name: "local-repository"}, backupSpecHash: "abcdef123456", source: {clusterRef: "docker-desktop", namespaces: ["default"]}, inventory: {resourceCount: 8, pvcCount: 1, backupBytes: 1024}, snapshots: []},
   status: {phase: "Available", restorable: true, conditions: []},
 });
 assert(recordDetailHTML.includes("备份内容清单") && recordDetailHTML.includes("完整性与安全") && recordDetailHTML.includes("run-1"), "record detail must expose inventory, integrity and source task");

@@ -20,7 +20,7 @@ const wizardOperations = [
 const wizardResources = [
   {key: "repositories", icon: "▣", title: "备份仓库", description: "Local 或 SFTP 存储位置", create: true, edit: true},
   {key: "policies", icon: "◷", title: "备份策略", description: "保护范围、仓库、调度与保留规则", create: true, edit: true},
-  {key: "backup-tasks", icon: "▶", title: "执行历史", description: "策略触发的单次备份执行", create: true, edit: false},
+  {key: "backup-tasks", icon: "▶", title: "执行历史", description: "策略执行或独立的一次性备份", create: true, edit: false},
   {key: "records", icon: "◇", title: "恢复点", description: "可恢复副本与完整性状态", create: false, edit: false},
   {key: "restore-tasks", icon: "↶", title: "恢复任务", description: "恢复计划、冲突与执行状态", create: true, edit: false},
   {key: "configs", icon: "⚙", title: "全局配置", description: "并发、安全与垃圾回收", create: true, edit: true},
@@ -120,12 +120,42 @@ const wizardSchemas = {
     ]},
   ],
   "backup-tasks": [
-    {title: "手动备份", icon: "1", fields: [
+    {title: "备份来源", icon: "1", fields: [
       field("metadata.name", "任务名称", "text", {required: true, createOnly: true}),
-      field("spec.policyRef.name", "来源策略", "select", {required: true, source: "policies"}),
-      field("spec.timeout", "任务超时", "text"),
-      field("spec.failurePolicy", "失败策略", "select", {options: [["Continue", "继续并记录失败"], ["FailFast", "快速失败"]]}),
-      field("spec.allowPartialRecord", "允许部分可用副本", "checkbox"),
+      field("spec.source.type", "创建方式", "select", {required: true, refresh: true, options: [["OneTime", "一次性备份（直接配置）"], ["Policy", "从已有策略立即执行"]]}),
+      field("spec.source.policyRef.name", "来源策略", "select", {required: true, source: "policies", condition: ["spec.source.type", "Policy"], help: "执行开始时固化策略当前配置，之后策略修改不影响本任务"}),
+      field("spec.backupSpec.repositoryRef.name", "备份仓库", "select", {required: true, source: "repositories", condition: ["spec.source.type", "OneTime"]}),
+    ]},
+    {title: "保护范围", icon: "2", condition: ["spec.source.type", "OneTime"], fields: [
+      field("spec.backupSpec.selection.mode", "范围模式", "select", {required: true, refresh: true, options: [["Namespace", "指定 Namespace"], ["Cluster", "整集群"]]}),
+      field("spec.backupSpec.selection.includeNamespaces", "包含 Namespace", "csv", {required: true, condition: ["spec.backupSpec.selection.mode", "Namespace"]}),
+      field("spec.backupSpec.selection.excludeNamespaces", "排除 Namespace", "csv", {condition: ["spec.backupSpec.selection.mode", "Namespace"]}),
+      field("spec.backupSpec.selection.labelSelector.matchLabels", "标签选择器", "map", {full: true, help: "每行一个 key=value"}),
+      field("spec.backupSpec.selection.resources.include", "包含资源类型", "csv", {full: true}),
+      field("spec.backupSpec.selection.resources.exclude", "排除资源类型", "csv", {full: true}),
+      field("spec.backupSpec.selection.includeClusterResources", "包含集群级资源", "checkbox"),
+      field("spec.backupSpec.selection.includeSecrets", "包含 Secret", "checkbox", {help: "包含 Secret 时仓库必须启用加密"}),
+      field("spec.backupSpec.selection.includeCRDs", "包含 CRD", "checkbox"),
+      field("spec.backupSpec.selection.includeCustomResources", "包含 Custom Resource", "checkbox"),
+    ]},
+    {title: "PVC 快照", icon: "3", condition: ["spec.source.type", "OneTime"], fields: [
+      field("spec.backupSpec.selection.pvc.enabled", "启用 CSI 快照", "checkbox", {refresh: true}),
+      field("spec.backupSpec.selection.pvc.snapshotClassName", "VolumeSnapshotClass", "text", {condition: ["spec.backupSpec.selection.pvc.enabled", true]}),
+      field("spec.backupSpec.selection.pvc.include", "包含 PVC", "csv", {condition: ["spec.backupSpec.selection.pvc.enabled", true]}),
+      field("spec.backupSpec.selection.pvc.exclude", "排除 PVC", "csv", {condition: ["spec.backupSpec.selection.pvc.enabled", true]}),
+      field("spec.backupSpec.selection.pvc.snapshotTimeout", "快照超时", "text", {condition: ["spec.backupSpec.selection.pvc.enabled", true]}),
+      field("spec.backupSpec.selection.pvc.failurePolicy", "快照失败策略", "select", {condition: ["spec.backupSpec.selection.pvc.enabled", true], options: [["ContinueAndMarkPartial", "继续并标记部分失败"], ["FailFast", "快速失败"]]}),
+      field("spec.backupSpec.selection.pvc.lifecycle", "快照生命周期", "select", {condition: ["spec.backupSpec.selection.pvc.enabled", true], options: [["RetainAfterRecordDeletion", "删除恢复点后保留"], ["DeleteWithRecord", "随恢复点删除"]]}),
+    ]},
+    {title: "保留与执行", icon: "4", condition: ["spec.source.type", "OneTime"], fields: [
+      field("spec.backupSpec.retention.maxAgeDays", "最长保留天数", "number", {required: true, help: "到期后自动删除仓库数据"}),
+      field("spec.backupSpec.retention.deleteSnapshots", "到期时删除快照", "checkbox"),
+      field("spec.backupSpec.timeout", "任务超时", "text"),
+      field("spec.backupSpec.retryPolicy.maxAttempts", "最大尝试次数", "number"),
+      field("spec.backupSpec.retryPolicy.backoff", "重试间隔", "text"),
+      field("spec.backupSpec.retryPolicy.maxBackoff", "最大退避时间", "text"),
+      field("spec.backupSpec.failurePolicy", "失败策略", "select", {options: [["Continue", "继续并记录失败"], ["FailFast", "快速失败"]]}),
+      field("spec.backupSpec.allowPartialRecord", "允许部分可用恢复点", "checkbox"),
     ]},
   ],
   "restore-tasks": [
@@ -598,7 +628,37 @@ function normalizeDraft(draft) {
     if (path(draft, "spec.selection.mode") === "Cluster") delete draft.spec.selection.includeNamespaces;
     if (!Object.keys(path(draft, "spec.selection.labelSelector.matchLabels", {})).length) delete draft.spec.selection.labelSelector;
   }
+  if (wizardState.resource === "backup-tasks") {
+    draft.spec.source ||= {type: "OneTime"};
+    if (draft.spec.source.type === "Policy") {
+      delete draft.spec.backupSpec;
+      delete draft.spec.backupSpecHash;
+      delete draft.spec.repositoryGeneration;
+      draft.spec.source.policyRef ||= {name: wizardState.context?.policies?.[0]?.metadata?.name || ""};
+    } else {
+      delete draft.spec.source.policyRef;
+      draft.spec.backupSpec ||= oneTimeBackupSpec();
+      if (path(draft, "spec.backupSpec.selection.mode") === "Cluster") delete draft.spec.backupSpec.selection.includeNamespaces;
+      if (!Object.keys(path(draft, "spec.backupSpec.selection.labelSelector.matchLabels", {})).length) delete draft.spec.backupSpec.selection.labelSelector;
+    }
+  }
   return draft;
+}
+
+function oneTimeBackupSpec() {
+  return {
+    repositoryRef: {name: wizardState.context?.repositories?.[0]?.metadata?.name || ""},
+    selection: {
+      mode: "Namespace", includeNamespaces: ["default"], excludeNamespaces: [],
+      resources: {include: ["configmaps", "services", "deployments.apps"], exclude: ["events", "pods"]},
+      includeClusterResources: false, includeSecrets: false, includeCRDs: false, includeCustomResources: true,
+      pvc: {enabled: false, snapshotTimeout: "10m", failurePolicy: "ContinueAndMarkPartial", lifecycle: "RetainAfterRecordDeletion"},
+      consistencyMode: "CrashConsistent",
+    },
+    retention: {maxCopies: 1, minCopies: 1, maxAgeDays: 30, deleteSnapshots: false},
+    timeout: "4h", retryPolicy: {maxAttempts: 3, backoff: "30s", maxBackoff: "10m"},
+    failurePolicy: "Continue", allowPartialRecord: true,
+  };
 }
 
 function conditionMatches(condition, target = wizardState.draft) {

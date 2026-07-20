@@ -58,7 +58,7 @@ func TestResourceCRUDInjectsClusterAndFiltersOtherClusters(t *testing.T) {
 
 func TestTaskCancelAction(t *testing.T) {
 	task := object("BackupTask", "running", map[string]any{
-		"clusterRef": "docker-desktop", "trigger": "Manual", "policyRef": map[string]any{"name": "policy"},
+		"clusterRef": "docker-desktop", "trigger": "Manual", "source": map[string]any{"type": "Policy", "policyRef": map[string]any{"name": "policy"}},
 	})
 	client := newFakeClient(task)
 	server, err := NewServer(client, "docker-desktop", "test", slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -120,12 +120,12 @@ func TestCreateRejectsDifferentCluster(t *testing.T) {
 
 func TestPolicyRunsAggregatesTasksAndRecoveryPoints(t *testing.T) {
 	older := object("BackupTask", "run-old", map[string]any{
-		"clusterRef": "docker-desktop", "policyRef": map[string]any{"name": "daily"},
+		"clusterRef": "docker-desktop", "source": map[string]any{"type": "Policy", "policyRef": map[string]any{"name": "daily"}},
 	})
 	older.SetCreationTimestamp(metav1.NewTime(time.Date(2026, 7, 15, 8, 0, 0, 0, time.UTC)))
 	older.Object["status"] = map[string]any{"phase": "Completed"}
 	newer := object("BackupTask", "run-new", map[string]any{
-		"clusterRef": "docker-desktop", "policyRef": map[string]any{"name": "daily"},
+		"clusterRef": "docker-desktop", "source": map[string]any{"type": "Policy", "policyRef": map[string]any{"name": "daily"}},
 	})
 	newer.SetCreationTimestamp(metav1.NewTime(time.Date(2026, 7, 16, 8, 0, 0, 0, time.UTC)))
 	newer.Object["status"] = map[string]any{"phase": "Completed"}
@@ -156,7 +156,7 @@ func TestPolicyRunsAggregatesTasksAndRecoveryPoints(t *testing.T) {
 	require.Equal(t, "可恢复", result.Runs[0]["conclusion"])
 }
 
-func TestRunPolicyNowFreezesMergedSelection(t *testing.T) {
+func TestRunPolicyNowCreatesPolicySourceTaskForControllerResolution(t *testing.T) {
 	repository := object("BackupRepository", "repo", map[string]any{
 		"clusterRef": "docker-desktop", "type": "Local",
 	})
@@ -180,13 +180,15 @@ func TestRunPolicyNowFreezesMergedSelection(t *testing.T) {
 	response := request(t, server, http.MethodPost, "/api/resources/policies/daily/actions/run", nil)
 	require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
 	task := mustObject(t, response)
-	policyName, _, err := unstructured.NestedString(task.Object, "spec", "policyRef", "name")
+	policyName, _, err := unstructured.NestedString(task.Object, "spec", "source", "policyRef", "name")
 	require.NoError(t, err)
 	require.Equal(t, "daily", policyName)
-	selectionMode, _, err := unstructured.NestedString(task.Object, "spec", "selectionSnapshot", "mode")
+	sourceType, _, err := unstructured.NestedString(task.Object, "spec", "source", "type")
 	require.NoError(t, err)
-	require.Equal(t, "Namespace", selectionMode)
-	require.Equal(t, float64(7), task.Object["spec"].(map[string]any)["policyGeneration"])
+	require.Equal(t, "Policy", sourceType)
+	_, found, err := unstructured.NestedMap(task.Object, "spec", "backupSpec")
+	require.NoError(t, err)
+	require.False(t, found, "controller must resolve and freeze the policy configuration")
 }
 
 func newFakeClient(objects ...runtime.Object) *dynamicfake.FakeDynamicClient {

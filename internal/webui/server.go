@@ -228,7 +228,7 @@ func (s *Server) handlePolicyRuns(w http.ResponseWriter, r *http.Request) {
 	}
 	runs := make([]map[string]any, 0)
 	for _, task := range s.filterCluster(resources["backup-tasks"], tasks.Items) {
-		policyName, _, _ := unstructured.NestedString(task.Object, "spec", "policyRef", "name")
+		policyName, _, _ := unstructured.NestedString(task.Object, "spec", "source", "policyRef", "name")
 		if policyName != name {
 			continue
 		}
@@ -568,16 +568,6 @@ func (s *Server) runPolicyNow(ctx context.Context, name string) (*unstructured.U
 	if !s.allowedCluster(policyDescriptor, policy) {
 		return nil, apierrors.NewNotFound(policyDescriptor.GVR.GroupResource(), name)
 	}
-	repositoryName, _, _ := unstructured.NestedString(policy.Object, "spec", "repositoryRef", "name")
-	if repositoryName == "" {
-		return nil, apierrors.NewBadRequest("策略缺少 repositoryRef")
-	}
-	repository, err := s.client.Resource(resources["repositories"].GVR).Get(ctx, repositoryName, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	policySpec, _, _ := unstructured.NestedMap(policy.Object, "spec")
-	selection, _, _ := unstructured.NestedMap(policy.Object, "spec", "selection")
 	requestID := randomID()
 	suffix := "-manual-" + strings.ToLower(requestID[:8])
 	policyPrefix := name
@@ -598,18 +588,10 @@ func (s *Server) runPolicyNow(ctx context.Context, name string) (*unstructured.U
 			"annotations": map[string]any{annotationUIRequest: requestID},
 		},
 		"spec": map[string]any{
-			"clusterRef":           s.clusterRef,
-			"trigger":              protectionv1alpha1.BackupTriggerManual,
-			"policyRef":            map[string]any{"name": policy.GetName(), "uid": string(policy.GetUID())},
-			"repositoryRef":        map[string]any{"name": repositoryName, "uid": string(repository.GetUID())},
-			"selectionSnapshot":    selection,
-			"policyGeneration":     policy.GetGeneration(),
-			"repositoryGeneration": repository.GetGeneration(),
-			"timeout":              policySpec["timeout"],
-			"retryPolicy":          policySpec["retryPolicy"],
-			"failurePolicy":        "Continue",
-			"allowPartialRecord":   true,
-			"idempotencyKey":       "webui/" + requestID,
+			"clusterRef":     s.clusterRef,
+			"trigger":        protectionv1alpha1.BackupTriggerManual,
+			"source":         map[string]any{"type": protectionv1alpha1.BackupTaskSourcePolicy, "policyRef": map[string]any{"name": policy.GetName(), "uid": string(policy.GetUID())}},
+			"idempotencyKey": "webui/" + requestID,
 		},
 	}}
 	return s.client.Resource(resources["backup-tasks"].GVR).Create(ctx, task, metav1.CreateOptions{})
